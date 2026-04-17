@@ -6,16 +6,16 @@ import time
 import requests
 
 # --- НАСТРОЙКИ ---
-# Ссылка сразу на нужный лист "Лист1", где лежат ники
+# Ссылка на первый лист таблицы (gid=0)
 URL_CSV = "https://google.com"
 # Твоя форма для отправки сообщений
 FORM_URL = "https://google.com"
 
 st.set_page_config(page_title="Pigeon Messenger", page_icon="🕊️", layout="wide")
 
-# --- ВЕЧНАЯ ПАМЯТЬ (КУКИ) ---
+# --- МЕНЕДЖЕР ПАМЯТИ (КУКИ) ---
 cookie_manager = stx.CookieManager()
-time.sleep(0.6) # Чуть больше времени для стабильности
+time.sleep(0.6) # Время для прогрузки куки из браузера
 
 if "logged_user" not in st.session_state:
     saved_user = cookie_manager.get(cookie="pigeon_user_v3")
@@ -42,7 +42,7 @@ with st.sidebar:
         if st.button("Покурлыкаем? 🕊️"):
             if u_in:
                 st.session_state["logged_user"] = u_in
-                cookie_manager.set("pigeon_user_v3", u_in)
+                cookie_manager.set("pigeon_user_v3", u_in, expires_at=datetime.now() + pd.Timedelta(days=30))
                 st.rerun()
     else:
         curr = st.session_state["logged_user"]
@@ -53,26 +53,28 @@ with st.sidebar:
         search = st.text_input("", placeholder="Поиск друга...", label_visibility="collapsed").strip().lower()
         
         try:
-            # Читаем таблицу
+            # Читаем таблицу и чистим заголовки
             df = pd.read_csv(URL_CSV)
+            df.columns = df.columns.str.strip().str.lower()
+            
             if 'username' in df.columns:
                 all_users = df["username"].astype(str).tolist()
                 if search:
                     # Ищем всех, кроме себя
-                    found = [u for u in all_users if search in u.lower() and u.strip() != curr]
+                    found = [u for u in all_users if search in str(u).lower() and str(u).strip() != curr]
                     if found:
                         for f in found:
-                            if st.button(f"👤 {f}", use_container_width=True):
+                            if st.button(f"👤 {f}", use_container_width=True, key=f"user_{f}"):
                                 st.session_state["selected_chat"] = f
                                 st.rerun()
                     else:
                         st.caption("Голубь не найден... 🕊️")
                 else:
-                    st.caption("Введите ник друга")
+                    st.caption("Введите ник друга для поиска")
             else:
-                st.error("На Лист1 не найдена колонка 'username'")
+                st.error(f"Колонка 'username' не найдена. Вижу: {list(df.columns)}")
         except Exception as e:
-            st.error("Не удалось подключиться к Лист1")
+            st.error("База данных недоступна")
 
         st.write("---")
         if st.button("Улететь (Выход)", type="primary", use_container_width=True):
@@ -88,6 +90,7 @@ if st.session_state["logged_user"]:
         st.header(f"Чат с {target}")
         st.divider()
         
+        # Поле ввода
         if prompt := st.chat_input(f"Написать {target}..."):
             if send_to_google(st.session_state["logged_user"], target, prompt):
                 st.toast("Сообщение улетело! 🕊️")
