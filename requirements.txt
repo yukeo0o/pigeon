@@ -1,6 +1,6 @@
-streamlit
-pandas
-extra-streamlit-components
-streamlit-autorefresh
-Pillow
-pytz
+streamlit>=1.28.0
+pandas>=2.0.0
+extra-streamlit-components>=0.1.60
+streamlit-autorefresh>=1.0.1
+Pillow>=10.0.0
+pytz>=2024.1
