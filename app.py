@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import extra_streamlit_components as stx
 import time
 import pandas as pd
@@ -9,39 +9,116 @@ import base64
 from PIL import Image
 import io
 import hashlib
-import secrets
 from streamlit_autorefresh import st_autorefresh
-
-# Автообновление каждые 2 секунды (для real-time чата)
-st_autorefresh(interval=2000, limit=100000, debounce=True)
-
-# Проверяем, установлен ли streamlit-webrtc
-try:
-    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
-    WEBRTC_AVAILABLE = True
-except ImportError:
-    WEBRTC_AVAILABLE = False
+import pytz
 
 st.set_page_config(page_title="Pigeon Messenger", page_icon="🕊️", layout="wide")
+
+# CSS анимации
+st.markdown("""
+<style>
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+@keyframes typing {
+    0% { content: '.'; }
+    33% { content: '..'; }
+    66% { content: '...'; }
+    100% { content: '.'; }
+}
+
+.typing-indicator {
+    display: inline-block;
+    color: #666;
+    font-style: italic;
+    animation: pulse 1.5s infinite;
+}
+
+.typing-dots::after {
+    content: '';
+    animation: typing 1.5s infinite;
+}
+
+.online-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background-color: #4CAF50;
+    border-radius: 50%;
+    margin-right: 5px;
+    animation: pulse 2s infinite;
+}
+
+.offline-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background-color: #999;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # Файлы
 MESSAGES_FILE = Path("messages/messages.json")
 USERS_FILE = Path("users/users.json")
 CONTACTS_FILE = Path("users/contacts.json")
 GROUPS_FILE = Path("users/groups.json")
-INVITES_FILE = Path("users/invites.json")
+FRIEND_REQUESTS_FILE = Path("users/friend_requests.json")
+ONLINE_STATUS_FILE = Path("users/online_status.json")
 
 # Создаем папки
 Path("messages").mkdir(exist_ok=True)
 Path("users").mkdir(exist_ok=True)
 Path("messages/photos").mkdir(parents=True, exist_ok=True)
 
+# Московское время
+MSK_TZ = pytz.timezone('Europe/Moscow')
+
+def get_msk_time():
+    return datetime.now(MSK_TZ)
+
+def format_last_seen(timestamp_str):
+    if not timestamp_str:
+        return "никогда не был"
+    
+    last_seen = datetime.fromisoformat(timestamp_str)
+    now = get_msk_time()
+    diff = now - last_seen
+    
+    if diff < timedelta(minutes=1):
+        return "только что"
+    elif diff < timedelta(hours=1):
+        minutes = int(diff.total_seconds() / 60)
+        return f"{minutes} мин назад"
+    elif diff < timedelta(hours=24):
+        hours = int(diff.total_seconds() / 3600)
+        return f"{hours} ч назад"
+    elif diff < timedelta(days=7):
+        days = diff.days
+        return f"{days} дн назад"
+    else:
+        return last_seen.strftime("%d.%m.%Y")
+
 # Куки
 cookie_manager = stx.CookieManager()
-time.sleep(0.5)
+time.sleep(0.8)
 
 if "logged_user" not in st.session_state:
-    st.session_state["logged_user"] = cookie_manager.get(cookie="pigeon_user_v7")
+    saved_user = cookie_manager.get(cookie="pigeon_user_v9")
+    if saved_user:
+        st.session_state["logged_user"] = saved_user
+    else:
+        st.session_state["logged_user"] = None
 
 if "selected_chat" not in st.session_state:
     st.session_state["selected_chat"] = None
@@ -49,20 +126,91 @@ if "selected_chat" not in st.session_state:
 if "chat_type" not in st.session_state:
     st.session_state["chat_type"] = "private"
 
+# Автообновление только в чате
+if st.session_state.get("logged_user") and st.session_state.get("selected_chat"):
+    st_autorefresh(interval=2000, limit=100000, debounce=True)
+
+# Проверяем WebRTC
+try:
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
+    WEBRTC_AVAILABLE = True
+except ImportError:
+    WEBRTC_AVAILABLE = False
+
 # --- ФУНКЦИИ БЕЗОПАСНОСТИ ---
 def hash_password(password):
-    """Хеширует пароль"""
-    salt = "pigeon_salt_2024"  # В реальном проекте используй случайную соль
+    salt = "pigeon_salt_2024"
     return hashlib.sha256((password + salt).encode()).hexdigest()
 
 def check_password(username, password):
-    """Проверяет пароль пользователя"""
     users = load_users()
     if username in users:
         return users[username].get("password") == hash_password(password)
     return False
 
-# --- ФУНКЦИИ ДЛЯ РАБОТЫ С ДАННЫМИ ---
+# --- ОНЛАЙН СТАТУС ---
+def update_online_status(username):
+    status = load_online_status()
+    status[username] = {
+        "last_seen": get_msk_time().isoformat(),
+        "is_online": True
+    }
+    with open(ONLINE_STATUS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(status, f, ensure_ascii=False)
+
+def load_online_status():
+    if ONLINE_STATUS_FILE.exists():
+        with open(ONLINE_STATUS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
+def is_user_online(username):
+    status = load_online_status()
+    if username in status:
+        last_seen = datetime.fromisoformat(status[username]["last_seen"])
+        now = get_msk_time()
+        return (now - last_seen) < timedelta(minutes=2)
+    return False
+
+def get_user_last_seen(username):
+    status = load_online_status()
+    if username in status:
+        return status[username]["last_seen"]
+    return None
+
+# --- СТАТУС ПЕЧАТАЕТ ---
+def update_typing_status(sender, target, is_typing):
+    typing_file = Path("users/typing_status.json")
+    if typing_file.exists():
+        with open(typing_file, 'r', encoding='utf-8') as f:
+            typing_data = json.load(f)
+    else:
+        typing_data = {}
+    
+    key = f"{sender}_{target}"
+    typing_data[key] = {
+        "is_typing": is_typing,
+        "timestamp": get_msk_time().isoformat()
+    }
+    
+    with open(typing_file, 'w', encoding='utf-8') as f:
+        json.dump(typing_data, f, ensure_ascii=False)
+
+def is_user_typing(sender, target):
+    typing_file = Path("users/typing_status.json")
+    if typing_file.exists():
+        with open(typing_file, 'r', encoding='utf-8') as f:
+            typing_data = json.load(f)
+        key = f"{sender}_{target}"
+        if key in typing_data:
+            data = typing_data[key]
+            if data["is_typing"]:
+                timestamp = datetime.fromisoformat(data["timestamp"])
+                if (get_msk_time() - timestamp) < timedelta(seconds=5):
+                    return True
+    return False
+
+# --- РАБОТА С ДАННЫМИ ---
 def load_messages():
     if MESSAGES_FILE.exists():
         with open(MESSAGES_FILE, 'r', encoding='utf-8') as f:
@@ -77,15 +225,16 @@ def save_message(sender, target, text, msg_type="text", chat_type="private"):
         "text": text,
         "type": msg_type,
         "chat_type": chat_type,
-        "time": datetime.now().strftime("%H:%M"),
-        "timestamp": datetime.now().isoformat()
+        "time": get_msk_time().strftime("%H:%M"),
+        "timestamp": get_msk_time().isoformat()
     })
     with open(MESSAGES_FILE, 'w', encoding='utf-8') as f:
         json.dump(msgs, f, ensure_ascii=False)
+    update_typing_status(sender, target, False)
 
 def save_photo(sender, target, photo_bytes, chat_type="private"):
     photo_dir = Path("messages/photos")
-    photo_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{sender}.jpg"
+    photo_name = f"{get_msk_time().strftime('%Y%m%d_%H%M%S')}_{sender}.jpg"
     photo_path = photo_dir / photo_name
     
     img = Image.open(io.BytesIO(photo_bytes))
@@ -98,8 +247,8 @@ def save_photo(sender, target, photo_bytes, chat_type="private"):
         "type": "photo",
         "photo_path": str(photo_path),
         "chat_type": chat_type,
-        "time": datetime.now().strftime("%H:%M"),
-        "timestamp": datetime.now().isoformat()
+        "time": get_msk_time().strftime("%H:%M"),
+        "timestamp": get_msk_time().isoformat()
     })
     with open(MESSAGES_FILE, 'w', encoding='utf-8') as f:
         json.dump(msgs, f, ensure_ascii=False)
@@ -114,7 +263,7 @@ def save_user(username, password):
     users = load_users()
     if username not in users:
         users[username] = {
-            "created": datetime.now().isoformat(),
+            "created": get_msk_time().isoformat(),
             "password": hash_password(password),
             "bio": "",
             "phone": ""
@@ -157,6 +306,47 @@ def remove_contact(username, contact):
             with open(CONTACTS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(all_contacts, f, ensure_ascii=False)
 
+def load_friend_requests():
+    if FRIEND_REQUESTS_FILE.exists():
+        with open(FRIEND_REQUESTS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
+def send_friend_request(from_user, to_user):
+    requests = load_friend_requests()
+    if to_user not in requests:
+        requests[to_user] = []
+    if from_user not in requests[to_user]:
+        requests[to_user].append(from_user)
+        with open(FRIEND_REQUESTS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(requests, f, ensure_ascii=False)
+        return True
+    return False
+
+def accept_friend_request(from_user, to_user):
+    requests = load_friend_requests()
+    if to_user in requests and from_user in requests[to_user]:
+        requests[to_user].remove(from_user)
+        with open(FRIEND_REQUESTS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(requests, f, ensure_ascii=False)
+    save_contact(from_user, to_user)
+    save_contact(to_user, from_user)
+
+def decline_friend_request(from_user, to_user):
+    requests = load_friend_requests()
+    if to_user in requests and from_user in requests[to_user]:
+        requests[to_user].remove(from_user)
+        with open(FRIEND_REQUESTS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(requests, f, ensure_ascii=False)
+
+def get_pending_requests(username):
+    requests = load_friend_requests()
+    return requests.get(username, [])
+
+def is_friend_request_sent(from_user, to_user):
+    requests = load_friend_requests()
+    return from_user in requests.get(to_user, [])
+
 def load_groups():
     if GROUPS_FILE.exists():
         with open(GROUPS_FILE, 'r', encoding='utf-8') as f:
@@ -168,7 +358,7 @@ def save_group(group_name, creator, members):
     groups[group_name] = {
         "creator": creator,
         "members": members,
-        "created": datetime.now().isoformat()
+        "created": get_msk_time().isoformat()
     }
     with open(GROUPS_FILE, 'w', encoding='utf-8') as f:
         json.dump(groups, f, ensure_ascii=False)
@@ -180,17 +370,6 @@ def get_user_groups(username):
         if username in group_data["members"]:
             user_groups.append(group_name)
     return user_groups
-
-def load_invites():
-    if INVITES_FILE.exists():
-        with open(INVITES_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {}
-
-def create_invite_code():
-    import random
-    import string
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
 
 def get_last_message(user, target, chat_type="private"):
     msgs = load_messages()
@@ -223,7 +402,8 @@ with st.sidebar:
                 if login_name and login_password:
                     if check_password(login_name, login_password):
                         st.session_state["logged_user"] = login_name
-                        cookie_manager.set("pigeon_user_v7", login_name, expires_at=datetime.now() + pd.Timedelta(days=30))
+                        cookie_manager.set("pigeon_user_v9", login_name, expires_at=datetime.now() + pd.Timedelta(days=30))
+                        update_online_status(login_name)
                         st.success("Успешный вход!")
                         st.rerun()
                     else:
@@ -248,7 +428,8 @@ with st.sidebar:
                 else:
                     if save_user(reg_name, reg_password):
                         st.session_state["logged_user"] = reg_name
-                        cookie_manager.set("pigeon_user_v7", reg_name, expires_at=datetime.now() + pd.Timedelta(days=30))
+                        cookie_manager.set("pigeon_user_v9", reg_name, expires_at=datetime.now() + pd.Timedelta(days=30))
+                        update_online_status(reg_name)
                         st.success("Регистрация успешна!")
                         st.rerun()
         
@@ -257,8 +438,26 @@ with st.sidebar:
     
     else:
         curr = st.session_state["logged_user"]
+        update_online_status(curr)
         
         st.markdown(f"### 🕊️ {curr}")
+        
+        # Заявки в друзья
+        pending = get_pending_requests(curr)
+        if pending:
+            with st.expander(f"📬 Заявки в друзья ({len(pending)})", expanded=True):
+                for req in pending:
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                    with col1:
+                        st.write(f"🕊️ **{req}**")
+                    with col2:
+                        if st.button("✅", key=f"accept_{req}", help="Принять"):
+                            accept_friend_request(req, curr)
+                            st.rerun()
+                    with col3:
+                        if st.button("❌", key=f"decline_{req}", help="Отклонить"):
+                            decline_friend_request(req, curr)
+                            st.rerun()
         
         menu = st.radio("", ["💬 Чаты", "👥 Группы", "👤 Контакты", "🔍 Поиск", "⚙️ Профиль"], label_visibility="collapsed")
         
@@ -274,7 +473,11 @@ with st.sidebar:
                     
                     col1, col2 = st.columns([4, 1])
                     with col1:
-                        if st.button(f"💬 {contact}\n_{last_msg}_", key=f"chat_{contact}", use_container_width=True):
+                        # Онлайн статус
+                        is_online = is_user_online(contact)
+                        status_dot = '<span class="online-dot"></span>' if is_online else '<span class="offline-dot"></span>'
+                        
+                        if st.button(f"{status_dot} 💬 {contact}\n_{last_msg}_", key=f"chat_{contact}", use_container_width=True):
                             st.session_state["selected_chat"] = contact
                             st.session_state["chat_type"] = "private"
                             st.rerun()
@@ -294,7 +497,7 @@ with st.sidebar:
                         st.rerun()
             
             if not contacts and not groups:
-                st.info("Нет чатов. Добавьте друзей или создайте группу!")
+                st.info("Нет чатов. Найдите друзей через поиск!")
         
         elif menu == "👥 Группы":
             st.subheader("Групповые чаты")
@@ -335,7 +538,11 @@ with st.sidebar:
             contacts = load_contacts(curr)
             if contacts:
                 for contact in contacts:
-                    st.write(f"🕊️ {contact}")
+                    is_online = is_user_online(contact)
+                    status_dot = "🟢" if is_online else "⚪"
+                    last_seen = get_user_last_seen(contact)
+                    last_seen_text = "онлайн" if is_online else format_last_seen(last_seen)
+                    st.write(f"{status_dot} 🕊️ **{contact}** — {last_seen_text}")
             else:
                 st.info("Список контактов пуст")
         
@@ -351,14 +558,18 @@ with st.sidebar:
                     for user in found:
                         col1, col2 = st.columns([3, 1])
                         with col1:
-                            st.write(f"🕊️ **{user}**")
+                            is_online = is_user_online(user)
+                            status_dot = "🟢" if is_online else "⚪"
+                            st.write(f"{status_dot} 🕊️ **{user}**")
                         with col2:
                             contacts = load_contacts(curr)
                             if user in contacts:
-                                st.success("✓ В контактах")
+                                st.success("✓ В друзьях")
+                            elif is_friend_request_sent(curr, user):
+                                st.info("⏳ Заявка отправлена")
                             else:
-                                if st.button("➕", key=f"add_{user}", help="Добавить в контакты"):
-                                    save_contact(curr, user)
+                                if st.button("➕", key=f"add_{user}", help="Добавить в друзья"):
+                                    send_friend_request(curr, user)
                                     st.rerun()
                 else:
                     st.caption("Никого не найдено")
@@ -371,7 +582,6 @@ with st.sidebar:
             st.write(f"**Логин:** {curr}")
             st.write(f"**Дата регистрации:** {user_data.get('created', 'Неизвестно')[:10]}")
             
-            # Статистика
             st.divider()
             msgs = load_messages()
             sent = len([m for m in msgs if m["sender"] == curr])
@@ -386,7 +596,7 @@ with st.sidebar:
         st.divider()
         
         if st.button("🚪 Выйти", use_container_width=True):
-            cookie_manager.delete("pigeon_user_v7")
+            cookie_manager.delete("pigeon_user_v9")
             st.session_state["logged_user"] = None
             st.session_state["selected_chat"] = None
             st.rerun()
@@ -401,7 +611,15 @@ if st.session_state["logged_user"]:
         col1, col2, col3, col4 = st.columns([5, 1, 1, 1])
         with col1:
             icon = "👥" if chat_type == "group" else "💬"
-            st.header(f"{icon} {target}")
+            
+            if chat_type == "private":
+                is_online = is_user_online(target)
+                status_dot = '<span class="online-dot"></span>' if is_online else '<span class="offline-dot"></span>'
+                last_seen = get_user_last_seen(target)
+                status_text = "онлайн" if is_online else f"был {format_last_seen(last_seen)}"
+                st.markdown(f"{status_dot} {icon} **{target}** — *{status_text}*", unsafe_allow_html=True)
+            else:
+                st.header(f"{icon} {target}")
         
         with col2:
             if WEBRTC_AVAILABLE:
@@ -414,9 +632,6 @@ if st.session_state["logged_user"]:
                         ),
                         media_stream_constraints={"video": False, "audio": True},
                     )
-            else:
-                if st.button("🎙️", help="Установите: pip install streamlit-webrtc"):
-                    st.toast("pip install streamlit-webrtc")
         
         with col3:
             if st.button("😊", help="Стикеры"):
@@ -443,6 +658,14 @@ if st.session_state["logged_user"]:
                         st.rerun()
             
             st.divider()
+        
+        # Статус "печатает..."
+        if chat_type == "private" and is_user_typing(target, curr):
+            st.markdown(f"""
+            <div class="typing-indicator">
+                {target} печатает<span class="typing-dots"></span>
+            </div>
+            """, unsafe_allow_html=True)
         
         # История сообщений
         chat_container = st.container()
@@ -472,10 +695,11 @@ if st.session_state["logged_user"]:
                         st.markdown(f"""
                         <div style="display: flex; justify-content: {align}; margin: 5px 0;">
                             <div style="background: {bg}; padding: 10px; border-radius: 15px; max-width: 70%; 
-                                        border: 1px solid #ddd;">
-                                <b>{m['sender']}</b><br>
-                                {m['text']}<br>
-                                <small style="color: #666;">{m['time']}</small>
+                                        border: 1px solid #ccc; color: #000000;
+                                        animation: fadeIn 0.3s ease-in;">
+                                <b style="color: #000000;">{m['sender']}</b><br>
+                                <span style="color: #000000;">{m['text']}</span><br>
+                                <small style="color: #666666;">{m['time']}</small>
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
@@ -486,10 +710,16 @@ if st.session_state["logged_user"]:
         col1, col2 = st.columns([5, 1])
         
         with col1:
-            text = st.chat_input(f"Написать в {target}...")
+            text = st.chat_input(f"Написать в {target}...", key=f"chat_input_{target}")
+            if text:
+                update_typing_status(curr, target, False)
         
         with col2:
             uploaded_photo = st.file_uploader("📷", type=['png', 'jpg', 'jpeg'], label_visibility="collapsed", key=f"photo_{target}")
+        
+        # Отслеживание ввода
+        if st.session_state.get(f"chat_input_{target}"):
+            update_typing_status(curr, target, True)
         
         if text:
             save_message(curr, target, text, "text", chat_type)
@@ -513,10 +743,12 @@ if st.session_state["logged_user"]:
             
             for contact in contacts:
                 last_msg = get_last_message(curr, contact, "private")
+                is_online = is_user_online(contact)
+                status_dot = '<span class="online-dot"></span>' if is_online else '<span class="offline-dot"></span>'
                 
                 col1, col2, col3 = st.columns([1, 5, 1])
                 with col1:
-                    st.markdown("💬")
+                    st.markdown(status_dot, unsafe_allow_html=True)
                 with col2:
                     st.markdown(f"**{contact}**<br><small>{last_msg}</small>", unsafe_allow_html=True)
                 with col3:
@@ -541,4 +773,4 @@ if st.session_state["logged_user"]:
                         st.rerun()
                 st.divider()
         else:
-            st.info("👋 Добро пожаловать! Перейдите в 'Поиск' или 'Группы' в боковом меню, чтобы начать общение!")
+            st.info("👋 Добро пожаловать! Перейдите в 'Поиск' в боковом меню, чтобы найти друзей!")
