@@ -8,8 +8,7 @@ import requests
 # --- НАСТРОЙКИ (ПРЯМАЯ ССЫЛКА) ---
 # Если эта ссылка верная, то после обновления кода всё заработает!
 PIGEON_URL = "https://docs.google.com/spreadsheets/d/1kUNW0Zt4c85M69Cxcsp4SZ2TJ-KoahHjLMxuyXxDgII/edit?gid=0#gid=0"
-FORM_URL = "https://docs.google.com/spreadsheets/d/1kUNW0Zt4c85M69Cxcsp4SZ2TJ-KoahHjLMxuyXxDgII/edit?gid=0#gid=0
-
+FORM_URL = "https://google.com"
 st.set_page_config(page_title="Pigeon Messenger", page_icon="🕊️", layout="wide")
 
 # --- ПАМЯТЬ ---
