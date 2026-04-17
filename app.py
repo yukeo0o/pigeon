@@ -5,29 +5,23 @@ import extra_streamlit_components as stx
 import time
 import requests
 
-# --- НАСТРОЙКИ ---
-# Ссылка на первый лист таблицы (gid=0)
-URL_CSV = "https://google.com"
-# Твоя форма для отправки сообщений
+# --- НАСТРОЙКИ (ПРЯМАЯ ССЫЛКА) ---
+# Если эта ссылка верная, то после обновления кода всё заработает!
+PIGEON_URL = "https://google.com"
 FORM_URL = "https://google.com"
 
 st.set_page_config(page_title="Pigeon Messenger", page_icon="🕊️", layout="wide")
 
-# --- МЕНЕДЖЕР ПАМЯТИ (КУКИ) ---
+# --- ПАМЯТЬ ---
 cookie_manager = stx.CookieManager()
-time.sleep(0.6) # Время для прогрузки куки из браузера
+time.sleep(0.6)
 
 if "logged_user" not in st.session_state:
-    saved_user = cookie_manager.get(cookie="pigeon_user_v3")
-    st.session_state["logged_user"] = saved_user
+    st.session_state["logged_user"] = cookie_manager.get(cookie="pigeon_user_v3")
 
-# --- ФУНКЦИЯ ОТПРАВКИ ---
-def send_to_google(sender, target, text):
-    payload = {
-        "entry.2062635904": sender, 
-        "entry.1764614138": target, 
-        "entry.362141529": text
-    }
+# --- ОТПРАВКА ---
+def send_msg(sender, target, text):
+    payload = {"entry.2062635904": sender, "entry.1764614138": target, "entry.362141529": text}
     try:
         requests.post(FORM_URL, data=payload)
         return True
@@ -48,52 +42,47 @@ with st.sidebar:
         curr = st.session_state["logged_user"]
         st.write(f"### Привет, {curr}! 🕊️")
         st.write("---")
-        
         st.write("### Начни общаться 💬")
         search = st.text_input("", placeholder="Поиск друга...", label_visibility="collapsed").strip().lower()
         
         try:
-            # Читаем таблицу и чистим заголовки
-            df = pd.read_csv(URL_CSV)
+            # ЧИТАЕМ НАПРЯМУЮ, ИГНОРИРУЯ ВСЕ SECRETS
+            df = pd.read_csv(PIGEON_URL)
             df.columns = df.columns.str.strip().str.lower()
             
             if 'username' in df.columns:
-                all_users = df["username"].astype(str).tolist()
+                all_u = df["username"].astype(str).tolist()
                 if search:
-                    # Ищем всех, кроме себя
-                    found = [u for u in all_users if search in str(u).lower() and str(u).strip() != curr]
+                    found = [u for u in all_u if search in str(u).lower() and str(u).strip() != curr]
                     if found:
                         for f in found:
-                            if st.button(f"👤 {f}", use_container_width=True, key=f"user_{f}"):
+                            if st.button(f"👤 {f}", use_container_width=True, key=f"u_{f}"):
                                 st.session_state["selected_chat"] = f
                                 st.rerun()
                     else:
                         st.caption("Голубь не найден... 🕊️")
                 else:
-                    st.caption("Введите ник друга для поиска")
+                    st.caption("Введите ник")
             else:
-                st.error(f"Колонка 'username' не найдена. Вижу: {list(df.columns)}")
+                st.error("Колонка 'username' не найдена в таблице")
         except Exception as e:
-            st.error("База данных недоступна")
+            st.error("База данных временно недоступна")
 
         st.write("---")
-        if st.button("Улететь (Выход)", type="primary", use_container_width=True):
+        if st.button("Выход", type="primary", use_container_width=True):
             cookie_manager.delete("pigeon_user_v3")
             st.session_state["logged_user"] = None
-            st.session_state["selected_chat"] = None
             st.rerun()
 
-# --- ОСНОВНОЙ ЭКРАН ---
+# --- ЭКРАН ЧАТА ---
 if st.session_state["logged_user"]:
     target = st.session_state.get("selected_chat")
     if target:
         st.header(f"Чат с {target}")
         st.divider()
-        
-        # Поле ввода
         if prompt := st.chat_input(f"Написать {target}..."):
-            if send_to_google(st.session_state["logged_user"], target, prompt):
-                st.toast("Сообщение улетело! 🕊️")
+            if send_msg(st.session_state["logged_user"], target, prompt):
+                st.toast("Отправлено! 🕊️")
                 st.write(f"**Вы**: {prompt}")
     else:
-        st.markdown("<br><br><center><h1>🕊️ Pigeon</h1><h3>Найди друга в поиске слева</h3></center>", unsafe_allow_html=True)
+        st.markdown("<br><br><center><h1>🕊️ Pigeon</h1><h3>Найди друга слева</h3></center>", unsafe_allow_html=True)
