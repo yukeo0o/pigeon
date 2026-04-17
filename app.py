@@ -3,26 +3,26 @@ import pandas as pd
 from datetime import datetime
 import extra_streamlit_components as stx
 import time
-import requests # Нужен для отправки формы
+import requests
 
-# --- НАСТРОЙКИ ---
-# Ссылка на твою таблицу (для чтения сообщений)
+# --- НАСТРОЙКИ (ТВОИ ССЫЛКИ) ---
+# Ссылка на таблицу (Лист 1, где лежат ники)
 URL_CSV = "https://google.com"
-# Ссылка на отправку формы (твой "передатчик")
+# Ссылка для отправки через твою форму
 FORM_URL = "https://google.com"
 
 st.set_page_config(page_title="Pigeon Messenger", page_icon="🕊️", layout="wide")
 
-# --- ПАМЯТЬ ВХОДА ---
+# --- ВЕЧНАЯ ПАМЯТЬ (КУКИ) ---
 cookie_manager = stx.CookieManager()
-time.sleep(0.5)
+time.sleep(0.5) # Пауза для прогрузки куки
 
 if "logged_user" not in st.session_state:
-    st.session_state["logged_user"] = cookie_manager.get(cookie="pigeon_user_v3")
+    saved_user = cookie_manager.get(cookie="pigeon_user_v3")
+    st.session_state["logged_user"] = saved_user
 
-# --- ФУНКЦИИ ---
-def send_message(sender, target, text):
-    # Те самые ID, которые я вытащил из твоей ссылки
+# --- ФУНКЦИЯ ОТПРАВКИ СООБЩЕНИЯ ---
+def send_to_google(sender, target, text):
     payload = {
         "entry.2062635904": sender, 
         "entry.1764614138": target, 
@@ -49,47 +49,49 @@ with st.sidebar:
         st.write(f"### Привет, {curr}! 🕊️")
         st.write("---")
         
-        # ПОИСК
-        search = st.text_input("Поиск друзей", placeholder="Ник...").strip().lower()
+        # ЖИВОЙ ПОИСК
+        st.write("### Начни общаться 💬")
+        search = st.text_input("", placeholder="Поиск друга...", label_visibility="collapsed").strip().lower()
+        
         try:
             df = pd.read_csv(URL_CSV)
-            all_users = df["username"].astype(str).tolist()
-            if search:
-                found = [u for u in all_users if search in u.lower() and u != curr]
-                for f in found:
-                    if st.button(f"👤 {f}", use_container_width=True):
-                        st.session_state["selected_chat"] = f
-                        st.rerun()
-        except:
-            st.caption("База данных в пути...")
+            if 'username' in df.columns:
+                all_users = df["username"].astype(str).tolist()
+                if search:
+                    found = [u for u in all_users if search in u.lower() and u != curr]
+                    if found:
+                        for f in found:
+                            if st.button(f"👤 {f}", use_container_width=True):
+                                st.session_state["selected_chat"] = f
+                                st.rerun()
+                    else:
+                        st.caption("Голубь не найден... 🕊️")
+                else:
+                    st.caption("Введите ник для поиска")
+            else:
+                st.error("В таблице нет колонки 'username'!")
+        except Exception as e:
+            st.error("База данных временно недоступна")
 
-        if st.button("Выйти", type="primary"):
+        st.write("---")
+        if st.button("Улететь (Выход)", type="primary", use_container_width=True):
             cookie_manager.delete("pigeon_user_v3")
             st.session_state["logged_user"] = None
+            st.session_state["selected_chat"] = None
             st.rerun()
 
-# --- ЧАТ ---
+# --- ОСНОВНОЙ ЭКРАН ---
 if st.session_state["logged_user"]:
     target = st.session_state.get("selected_chat")
     if target:
         st.header(f"Чат с {target}")
+        st.divider()
         
-        # Загрузка и показ сообщений
-        try:
-            msgs_df = pd.read_csv(URL_CSV) # Читаем ту же таблицу (или лист с ответами)
-            # Фильтруем сообщения только для этой пары
-            chat_msgs = msgs_df[((msgs_df['sender'] == st.session_state["logged_user"]) & (msgs_df['target'] == target)) | 
-                                ((msgs_df['sender'] == target) & (msgs_df['target'] == st.session_state["logged_user"]))]
-            
-            for index, row in chat_msgs.iterrows():
-                st.write(f"**{row['sender']}**: {row['text']}")
-        except:
-            st.caption("Сообщений пока нет. Будь первым!")
-
+        # Поле ввода и отправка
         if prompt := st.chat_input(f"Написать {target}..."):
-            if send_message(st.session_state["logged_user"], target, prompt):
-                st.rerun()
-            else:
-                st.error("Ошибка отправки")
+            if send_to_google(st.session_state["logged_user"], target, prompt):
+                st.toast("Курлык! Отправлено 🕊️")
+                # Тут можно добавить логику показа сообщения, но для начала проверим отправку
+                st.write(f"**Вы**: {prompt}")
     else:
-        st.markdown("<center><h1>🕊️ Pigeon</h1><h3>Найди друга в поиске</h3></center>", unsafe_allow_html=True)
+        st.markdown("<br><br><center><h1>🕊️ Pigeon</h1><h3>Найди друга в поиске слева</h3></center>", unsafe_allow_html=True)
