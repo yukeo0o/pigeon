@@ -1,18 +1,31 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import os
+import extra_streamlit_components as stx # Магия для памяти
 
 # ССЫЛКА НА ТАБЛИЦУ
 URL = "https://google.com"
 
-st.set_page_config(page_title="Pigeon 2.4", page_icon="🕊️", layout="wide")
+st.set_page_config(page_title="Pigeon 2.5", page_icon="🕊️", layout="wide")
 
-# --- ПАМЯТЬ ВХОДА ---
+# --- ИНИЦИАЛИЗАЦИЯ КУКИ ---
+cookie_manager = stx.CookieManager()
+
+# Пытаемся достать ник из браузера
 if "logged_user" not in st.session_state:
+    saved_user = cookie_manager.get(cookie="pigeon_user_name")
+    st.session_state["logged_user"] = saved_user
+
+# --- ФУНКЦИИ ВХОДА ---
+def login_user(username):
+    st.session_state["logged_user"] = username
+    # Запоминаем на 30 дней
+    cookie_manager.set("pigeon_user_name", username, expires_at=datetime.now() + pd.Timedelta(days=30))
+
+def logout_user():
     st.session_state["logged_user"] = None
-if "selected_chat" not in st.session_state:
-    st.session_state["selected_chat"] = None
+    cookie_manager.delete("pigeon_user_name")
+    st.rerun()
 
 # --- БОКОВАЯ ПАНЕЛЬ ---
 with st.sidebar:
@@ -21,39 +34,36 @@ with st.sidebar:
         u_in = st.text_input("Никнейм").strip()
         if st.button("Покурлыкаем? 🕊️"):
             if u_in:
-                st.session_state["logged_user"] = u_in
+                login_user(u_in)
                 st.rerun()
     else:
         curr = st.session_state["logged_user"]
-        st.write(f"### Привет, {curr}! Покурлыкаем? 🕊️")
-        st.write("---")
+        st.write(f"### Привет, {curr}! 🕊️")
         
-        # --- ВОТ ОН, ЖИВОЙ ПОИСК (ИСПРАВЛЕННЫЙ) ---
+        st.write("---")
         st.write("### Начни общаться 💬")
+        
         try:
-            # Превращаем ссылку для чтения через Pandas
-            csv_url = URL.replace('/edit#gid=', '/export?format=csv&gid=')
-            user_df = pd.read_csv(csv_url)
+            user_df = pd.read_csv(URL)
             all_users = user_df["username"].astype(str).tolist()
-            
-            search = st.text_input("", placeholder="Поиск друзей...", label_visibility="collapsed").strip().lower()
+        except:
+            all_users = ["lipwix", "Yukeo"]
 
-            if search:
-                found = [u for u in all_users if search in str(u).lower() and str(u) != curr]
-                if found:
-                    for f in found:
-                        if st.button(f"👤 {f}", use_container_width=True):
-                            st.session_state["selected_chat"] = f
-                            st.rerun()
-                else:
-                    st.caption("Голубь не найден... 🕊️")
-        except Exception as e:
-            st.error("База данных пока недоступна")
+        search = st.text_input("Поиск", placeholder="Ник...", label_visibility="collapsed").strip().lower()
+
+        if search:
+            found = [u for u in all_users if search in str(u).lower() and str(u) != curr]
+            if found:
+                for f in found:
+                    if st.button(f"👤 {f}", use_container_width=True):
+                        st.session_state["selected_chat"] = f
+                        st.rerun()
+            else:
+                st.caption("Голубь не найден... 🕊️")
         
         st.write("---")
-        if st.button("Выйти", type="primary"):
-            st.session_state["logged_user"] = None
-            st.rerun()
+        if st.button("Улететь (Выход)", type="primary"):
+            logout_user()
 
 # --- ГЛАВНЫЙ ЭКРАН ---
 if st.session_state["logged_user"]:
@@ -61,19 +71,14 @@ if st.session_state["logged_user"]:
     if target:
         st.header(f"Чат с {target}")
         
-        # СКРЕПКА (МЕДИА) 📎
         with st.expander("📎 Прикрепить медиа"):
             file = st.file_uploader("Выбери фото", type=['png', 'jpg', 'jpeg'])
-            if file:
+            if file and st.button("Отправить фото"):
                 st.image(file, width=250)
-                if st.button("Отправить в чат"):
-                    st.success("Фото отправлено! 📸")
+                st.success("Доставлено! 📸")
 
         st.divider()
-        chat_box = st.container(height=400)
-        
         if prompt := st.chat_input(f"Написать {target}..."):
-            time = datetime.now().strftime("%H:%M")
-            chat_box.write(f"**{st.session_state['logged_user']}** [{time}]: {prompt}")
+            st.write(f"**{st.session_state['logged_user']}**: {prompt}")
     else:
-        st.markdown("<br><br><center><h1>🕊️ Pigeon</h1><h3>Найди друга в поиске слева</h3></center>", unsafe_allow_html=True)
+        st.markdown("<br><br><center><h1>🕊️ Pigeon</h1><h3>Найди друга слева</h3></center>", unsafe_allow_html=True)
