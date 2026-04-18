@@ -1,4 +1,4 @@
-import streamlit as st
+  import streamlit as st
 import json
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -23,7 +23,7 @@ ws_client_id = None
 
 st.set_page_config(page_title="Pigeon Messenger", page_icon="🕊️", layout="wide")
 
-# Подключение шрифта Noto Sans
+# Подключение шрифта Noto Sans + стили
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;700&display=swap');
@@ -55,13 +55,6 @@ html, body, [class*="css"] {
     color: #666;
     font-style: italic;
     animation: pulse 1.5s infinite;
-}.notification-bubble {
-    background: #E8D5F5;
-    color: #000000;
-    padding: 12px;
-    border-radius: 12px;
-    margin: 5px 0;
-    border-left: 4px solid #7B2D8E;
 }
 
 .typing-dots::after {
@@ -92,6 +85,12 @@ html, body, [class*="css"] {
     word-wrap: break-word;
     overflow-wrap: break-word;
     word-break: break-word;
+}
+
+/* Фиолетовый фон для сообщений */
+.message-purple {
+    background: #E8D5F5 !important;
+    border-left: 4px solid #7B2D8E !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -142,7 +141,7 @@ cookie_manager = stx.CookieManager()
 time.sleep(0.8)
 
 if "logged_user" not in st.session_state:
-    saved_user = cookie_manager.get(cookie="pigeon_user_v10")
+    saved_user = cookie_manager.get(cookie="pigeon_user_v11")
     if saved_user:
         st.session_state["logged_user"] = saved_user
     else:
@@ -338,7 +337,7 @@ def save_user(username, password):
             "created": get_msk_time().isoformat(),
             "password": hash_password(password),
             "bio": "",
-            "phone": ""
+            "display_name": username
         }
         with open(USERS_FILE, 'w', encoding='utf-8') as f:
             json.dump(users, f, ensure_ascii=False)
@@ -474,9 +473,8 @@ with st.sidebar:
                 if login_name and login_password:
                     if check_password(login_name, login_password):
                         st.session_state["logged_user"] = login_name
-                        cookie_manager.set("pigeon_user_v10", login_name, expires_at=datetime.now() + pd.Timedelta(days=30))
+                        cookie_manager.set("pigeon_user_v11", login_name, expires_at=datetime.now() + pd.Timedelta(days=30))
                         update_online_status(login_name)
-                        # Запускаем WebSocket
                         if not ws_connected:
                             threading.Thread(target=start_websocket, args=(login_name,), daemon=True).start()
                         st.success("Успешный вход!")
@@ -503,9 +501,8 @@ with st.sidebar:
                 else:
                     if save_user(reg_name, reg_password):
                         st.session_state["logged_user"] = reg_name
-                        cookie_manager.set("pigeon_user_v10", reg_name, expires_at=datetime.now() + pd.Timedelta(days=30))
+                        cookie_manager.set("pigeon_user_v11", reg_name, expires_at=datetime.now() + pd.Timedelta(days=30))
                         update_online_status(reg_name)
-                        # Запускаем WebSocket
                         if not ws_connected:
                             threading.Thread(target=start_websocket, args=(reg_name,), daemon=True).start()
                         st.success("Регистрация успешна!")
@@ -518,21 +515,15 @@ with st.sidebar:
         curr = st.session_state["logged_user"]
         update_online_status(curr)
         
-        # Шапка
         st.markdown(f"### 🕊️ {curr}")
-        
-        # Поиск
         search = st.text_input("🔍 Поиск", placeholder="Найти чат или контакт...", label_visibility="collapsed")
-        
         st.divider()
         
-        # Кнопка создания
         col1, col2 = st.columns([1, 5])
         with col1:
             if st.button("➕", help="Создать группу", use_container_width=True):
                 st.session_state["show_create_group"] = True
         
-        # Список чатов
         st.subheader("💬 Чаты")
         
         contacts = load_contacts(curr)
@@ -542,14 +533,13 @@ with st.sidebar:
             contacts = [c for c in contacts if search.lower() in c.lower()]
             groups = [g for g in groups if search.lower() in g.lower()]
         
-        # Заявки в друзья
         pending = get_pending_requests(curr)
         if pending:
             with st.expander(f"📬 Заявки ({len(pending)})", expanded=False):
                 for req in pending:
                     col1, col2, col3 = st.columns([3, 1, 1])
                     with col1:
-                            st.markdown(f'<div class="notification-bubble">🕊️ <b>{req}</b> хочет добавиться в друзья</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="notification-bubble">🕊️ <b>{req}</b> хочет добавиться</div>', unsafe_allow_html=True)
                     with col2:
                         if st.button("✅", key=f"acc_{req}"):
                             accept_friend_request(req, curr)
@@ -559,7 +549,6 @@ with st.sidebar:
                             decline_friend_request(req, curr)
                             st.rerun()
         
-        # Отображаем чаты
         if contacts:
             for contact in contacts:
                 last_msg = get_last_message(curr, contact, "private")
@@ -574,7 +563,6 @@ with st.sidebar:
         if groups:
             for group in groups:
                 last_msg = get_last_message(curr, group, "group")
-                
                 if st.button(f"👥 {group}\n_{last_msg}_", key=f"grp_{group}", use_container_width=True):
                     st.session_state["selected_chat"] = group
                     st.session_state["chat_type"] = "group"
@@ -585,7 +573,6 @@ with st.sidebar:
         
         st.divider()
         
-        # Кнопка "Ещё"
         with st.expander("⚙️ Ещё", expanded=False):
             if st.button("👤 Профиль", use_container_width=True):
                 st.session_state["current_menu"] = "profile"
@@ -597,7 +584,7 @@ with st.sidebar:
                 st.session_state["current_menu"] = "search"
                 st.rerun()
             if st.button("🚪 Выйти", use_container_width=True):
-                cookie_manager.delete("pigeon_user_v10")
+                cookie_manager.delete("pigeon_user_v11")
                 st.session_state["logged_user"] = None
                 st.session_state["selected_chat"] = None
                 st.rerun()
@@ -627,13 +614,44 @@ if st.session_state.get("show_create_group", False):
 
 # --- ЭКРАНЫ МЕНЮ "ЕЩЁ" ---
 if st.session_state.get("current_menu") == "profile":
-    st.header("👤 Профиль")
+    st.header("👤 Настройки профиля")
     users = load_users()
     user_data = users.get(curr, {})
     
-    st.write(f"**Логин:** {curr}")
-    st.write(f"**Дата регистрации:** {user_data.get('created', 'Неизвестно')[:10]}")
+    tab1, tab2 = st.tabs(["📝 Профиль", "🔐 Безопасность"])
     
+    with tab1:
+        display_name = st.text_input("Отображаемое имя", value=user_data.get("display_name", curr))
+        bio = st.text_area("О себе", value=user_data.get("bio", ""), max_chars=100)
+        
+        if st.button("💾 Сохранить профиль", use_container_width=True):
+            users[curr]["display_name"] = display_name
+            users[curr]["bio"] = bio
+            with open(USERS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(users, f, ensure_ascii=False)
+            st.success("Профиль обновлён!")
+            st.rerun()
+    
+    with tab2:
+        st.subheader("Смена пароля")
+        old_pass = st.text_input("Текущий пароль", type="password")
+        new_pass = st.text_input("Новый пароль", type="password")
+        new_pass2 = st.text_input("Повторите новый пароль", type="password")
+        
+        if st.button("🔒 Сменить пароль", use_container_width=True):
+            if not check_password(curr, old_pass):
+                st.error("Неверный текущий пароль")
+            elif new_pass != new_pass2:
+                st.error("Новые пароли не совпадают")
+            elif len(new_pass) < 4:
+                st.error("Пароль должен быть не менее 4 символов")
+            else:
+                users[curr]["password"] = hash_password(new_pass)
+                with open(USERS_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(users, f, ensure_ascii=False)
+                st.success("Пароль изменён!")
+    
+    st.divider()
     msgs = load_messages()
     sent = len([m for m in msgs if m["sender"] == curr])
     received = len([m for m in msgs if m.get("target") == curr])
@@ -704,7 +722,6 @@ else:
     chat_type = st.session_state.get("chat_type", "private")
     
     if target:
-        # Проверяем новые сообщения из WebSocket
         if "new_ws_message" in st.session_state and st.session_state["new_ws_message"]:
             try:
                 new_msg = json.loads(st.session_state["new_ws_message"])
@@ -756,7 +773,6 @@ else:
         
         st.divider()
         
-        # Стикеры
         if st.session_state.get("show_stickers", False):
             st.write("**Стикеры:**")
             sticker_cols = st.columns(8)
@@ -770,7 +786,6 @@ else:
                         st.rerun()
             st.divider()
         
-        # Статус "печатает..."
         if chat_type == "private" and is_user_typing(target, curr):
             st.markdown(f"""
             <div class="typing-indicator">
@@ -778,7 +793,6 @@ else:
             </div>
             """, unsafe_allow_html=True)
         
-        # История сообщений
         chat_container = st.container()
         
         with chat_container:
@@ -796,7 +810,6 @@ else:
                 for m in chat_msgs:
                     is_me = m["sender"] == curr
                     align = "flex-end" if is_me else "flex-start"
-                    bg = "#DCF8C6" if is_me else "#FFFFFF"
                     
                     if m.get("type") == "photo":
                         col1, col2, col3 = st.columns([1, 2, 1])
@@ -805,7 +818,7 @@ else:
                     else:
                         st.markdown(f"""
                         <div style="display: flex; justify-content: {align}; margin: 5px 0;">
-                            <div class="message-bubble" style="background: {bg}; padding: 10px; border-radius: 15px; max-width: 70%; 
+                            <div class="message-bubble message-purple" style="padding: 10px; border-radius: 15px; max-width: 70%; 
                                         border: 1px solid #ccc; color: #000000;
                                         animation: fadeIn 0.3s ease-in;">
                                 <b style="color: #000000;">{m['sender']}</b><br>
@@ -817,7 +830,6 @@ else:
         
         st.divider()
         
-        # Отправка
         col1, col2 = st.columns([5, 1])
         
         with col1:
