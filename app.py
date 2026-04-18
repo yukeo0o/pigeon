@@ -92,6 +92,16 @@ html, body, [class*="css"] {
     background: #E8D5F5 !important;
     border-left: 4px solid #7B2D8E !important;
 }
+
+/* Фиолетовый фон для заявок */
+.notification-bubble {
+    background: #E8D5F5;
+    color: #000000;
+    padding: 10px 12px;
+    border-radius: 12px;
+    margin: 5px 0;
+    border-left: 4px solid #7B2D8E;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -117,11 +127,9 @@ def get_msk_time():
 def format_last_seen(timestamp_str):
     if not timestamp_str:
         return "никогда не был"
-    
     last_seen = datetime.fromisoformat(timestamp_str)
     now = get_msk_time()
     diff = now - last_seen
-    
     if diff < timedelta(minutes=1):
         return "только что"
     elif diff < timedelta(hours=1):
@@ -174,7 +182,6 @@ async def connect_websocket(username):
     try:
         async with websockets.connect(uri) as websocket:
             ws_connected = True
-            
             async def send_messages():
                 while True:
                     try:
@@ -182,12 +189,10 @@ async def connect_websocket(username):
                         await websocket.send(msg)
                     except queue.Empty:
                         await asyncio.sleep(0.1)
-            
             async def receive_messages():
                 async for message in websocket:
                     st.session_state["new_ws_message"] = message
                     st.rerun()
-            
             await asyncio.gather(send_messages(), receive_messages())
     except:
         ws_connected = False
@@ -246,13 +251,11 @@ def update_typing_status(sender, target, is_typing):
             typing_data = json.load(f)
     else:
         typing_data = {}
-    
     key = f"{sender}_{target}"
     typing_data[key] = {
         "is_typing": is_typing,
         "timestamp": get_msk_time().isoformat()
     }
-    
     with open(typing_file, 'w', encoding='utf-8') as f:
         json.dump(typing_data, f, ensure_ascii=False)
 
@@ -291,8 +294,6 @@ def save_message(sender, target, text, msg_type="text", chat_type="private"):
     with open(MESSAGES_FILE, 'w', encoding='utf-8') as f:
         json.dump(msgs, f, ensure_ascii=False)
     update_typing_status(sender, target, False)
-    
-    # Отправляем через WebSocket
     if ws_connected:
         msg_data = json.dumps({
             "sender": sender,
@@ -307,10 +308,8 @@ def save_photo(sender, target, photo_bytes, chat_type="private"):
     photo_dir = Path("messages/photos")
     photo_name = f"{get_msk_time().strftime('%Y%m%d_%H%M%S')}_{sender}.jpg"
     photo_path = photo_dir / photo_name
-    
     img = Image.open(io.BytesIO(photo_bytes))
     img.save(photo_path)
-    
     msgs = load_messages()
     msgs.append({
         "sender": sender,
@@ -357,10 +356,8 @@ def save_contact(username, contact):
             all_contacts = json.load(f)
     else:
         all_contacts = {}
-    
     if username not in all_contacts:
         all_contacts[username] = []
-    
     if contact not in all_contacts[username]:
         all_contacts[username].append(contact)
         with open(CONTACTS_FILE, 'w', encoding='utf-8') as f:
@@ -449,7 +446,6 @@ def get_last_message(user, target, chat_type="private"):
                      (m["sender"] == target and m["target"] == user)]
     else:
         chat_msgs = [m for m in msgs if m.get("target") == target and m.get("chat_type") == "group"]
-    
     if chat_msgs:
         last = chat_msgs[-1]
         if last.get("type") == "photo":
@@ -462,13 +458,10 @@ with st.sidebar:
     if st.session_state["logged_user"] is None:
         st.header("🕊️ Pigeon")
         st.subheader("Вход / Регистрация")
-        
         tab1, tab2 = st.tabs(["🚪 Войти", "✨ Регистрация"])
-        
         with tab1:
             login_name = st.text_input("Логин", key="login")
             login_password = st.text_input("Пароль", type="password", key="login_pass")
-            
             if st.button("🚀 Войти", use_container_width=True):
                 if login_name and login_password:
                     if check_password(login_name, login_password):
@@ -483,12 +476,10 @@ with st.sidebar:
                         st.error("Неверный логин или пароль")
                 else:
                     st.warning("Введите логин и пароль")
-        
         with tab2:
             reg_name = st.text_input("Придумайте логин", key="reg")
             reg_password = st.text_input("Придумайте пароль", type="password", key="reg_pass")
             reg_password2 = st.text_input("Повторите пароль", type="password", key="reg_pass2")
-            
             if st.button("✨ Зарегистрироваться", use_container_width=True):
                 if not reg_name or not reg_password:
                     st.warning("Заполните все поля")
@@ -507,32 +498,24 @@ with st.sidebar:
                             threading.Thread(target=start_websocket, args=(reg_name,), daemon=True).start()
                         st.success("Регистрация успешна!")
                         st.rerun()
-        
         st.divider()
         st.caption(f"👥 Пользователей: {len(load_users())}")
-    
     else:
         curr = st.session_state["logged_user"]
         update_online_status(curr)
-        
         st.markdown(f"### 🕊️ {curr}")
         search = st.text_input("🔍 Поиск", placeholder="Найти чат или контакт...", label_visibility="collapsed")
         st.divider()
-        
         col1, col2 = st.columns([1, 5])
         with col1:
             if st.button("➕", help="Создать группу", use_container_width=True):
                 st.session_state["show_create_group"] = True
-        
         st.subheader("💬 Чаты")
-        
         contacts = load_contacts(curr)
         groups = get_user_groups(curr)
-        
         if search:
             contacts = [c for c in contacts if search.lower() in c.lower()]
             groups = [g for g in groups if search.lower() in g.lower()]
-        
         pending = get_pending_requests(curr)
         if pending:
             with st.expander(f"📬 Заявки ({len(pending)})", expanded=False):
@@ -548,18 +531,15 @@ with st.sidebar:
                         if st.button("❌", key=f"dec_{req}"):
                             decline_friend_request(req, curr)
                             st.rerun()
-        
         if contacts:
             for contact in contacts:
                 last_msg = get_last_message(curr, contact, "private")
                 is_online = is_user_online(contact)
                 status_dot = "🟢" if is_online else "⚪"
-                
                 if st.button(f"{status_dot} {contact}\n_{last_msg}_", key=f"chat_{contact}", use_container_width=True):
                     st.session_state["selected_chat"] = contact
                     st.session_state["chat_type"] = "private"
                     st.rerun()
-        
         if groups:
             for group in groups:
                 last_msg = get_last_message(curr, group, "group")
@@ -567,12 +547,9 @@ with st.sidebar:
                     st.session_state["selected_chat"] = group
                     st.session_state["chat_type"] = "group"
                     st.rerun()
-        
         if not contacts and not groups:
             st.caption("Нет чатов. Нажмите 🔍 чтобы найти друзей.")
-        
         st.divider()
-        
         with st.expander("⚙️ Ещё", expanded=False):
             if st.button("👤 Профиль", use_container_width=True):
                 st.session_state["current_menu"] = "profile"
@@ -598,7 +575,6 @@ if st.session_state.get("show_create_group", False):
         if curr in all_users:
             all_users.remove(curr)
         selected = st.multiselect("Участники", all_users)
-        
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Создать", use_container_width=True):
@@ -617,13 +593,10 @@ if st.session_state.get("current_menu") == "profile":
     st.header("👤 Настройки профиля")
     users = load_users()
     user_data = users.get(curr, {})
-    
     tab1, tab2 = st.tabs(["📝 Профиль", "🔐 Безопасность"])
-    
     with tab1:
         display_name = st.text_input("Отображаемое имя", value=user_data.get("display_name", curr))
         bio = st.text_area("О себе", value=user_data.get("bio", ""), max_chars=100)
-        
         if st.button("💾 Сохранить профиль", use_container_width=True):
             users[curr]["display_name"] = display_name
             users[curr]["bio"] = bio
@@ -631,13 +604,11 @@ if st.session_state.get("current_menu") == "profile":
                 json.dump(users, f, ensure_ascii=False)
             st.success("Профиль обновлён!")
             st.rerun()
-    
     with tab2:
         st.subheader("Смена пароля")
         old_pass = st.text_input("Текущий пароль", type="password")
         new_pass = st.text_input("Новый пароль", type="password")
         new_pass2 = st.text_input("Повторите новый пароль", type="password")
-        
         if st.button("🔒 Сменить пароль", use_container_width=True):
             if not check_password(curr, old_pass):
                 st.error("Неверный текущий пароль")
@@ -650,18 +621,15 @@ if st.session_state.get("current_menu") == "profile":
                 with open(USERS_FILE, 'w', encoding='utf-8') as f:
                     json.dump(users, f, ensure_ascii=False)
                 st.success("Пароль изменён!")
-    
     st.divider()
     msgs = load_messages()
     sent = len([m for m in msgs if m["sender"] == curr])
     received = len([m for m in msgs if m.get("target") == curr])
-    
     col1, col2 = st.columns(2)
     with col1:
         st.metric("📤 Отправлено", sent)
     with col2:
         st.metric("📥 Получено", received)
-    
     if st.button("← Назад"):
         st.session_state["current_menu"] = "chats"
         st.rerun()
@@ -678,7 +646,6 @@ elif st.session_state.get("current_menu") == "contacts":
             st.write(f"{status_dot} 🕊️ **{contact}** — {last_seen_text}")
     else:
         st.info("Список контактов пуст")
-    
     if st.button("← Назад"):
         st.session_state["current_menu"] = "chats"
         st.rerun()
@@ -686,11 +653,9 @@ elif st.session_state.get("current_menu") == "contacts":
 elif st.session_state.get("current_menu") == "search":
     st.header("🔍 Найти людей")
     search_query = st.text_input("Введите логин", placeholder="Поиск...")
-    
     if search_query:
         all_users = load_users()
         found = [u for u in all_users.keys() if search_query.lower() in u.lower() and u != curr]
-        
         if found:
             for user in found:
                 col1, col2 = st.columns([3, 1])
@@ -710,7 +675,6 @@ elif st.session_state.get("current_menu") == "search":
                             st.rerun()
         else:
             st.caption("Никого не найдено")
-    
     if st.button("← Назад"):
         st.session_state["current_menu"] = "chats"
         st.rerun()
@@ -740,7 +704,6 @@ else:
         col1, col2, col3, col4 = st.columns([5, 1, 1, 1])
         with col1:
             icon = "👥" if chat_type == "group" else "💬"
-            
             if chat_type == "private":
                 is_online = is_user_online(target)
                 status_dot = '<span class="online-dot"></span>' if is_online else '<span class="offline-dot"></span>'
@@ -777,7 +740,6 @@ else:
             st.write("**Стикеры:**")
             sticker_cols = st.columns(8)
             stickers = ["👍", "❤️", "😂", "😮", "😢", "😡", "🎉", "🕊️"]
-            
             for i, sticker in enumerate(stickers):
                 with sticker_cols[i]:
                     if st.button(sticker, key=f"sticker_{sticker}_{target}"):
@@ -797,7 +759,6 @@ else:
         
         with chat_container:
             msgs = load_messages()
-            
             if chat_type == "private":
                 chat_msgs = [m for m in msgs if (m["sender"] == curr and m["target"] == target) or 
                             (m["sender"] == target and m["target"] == curr)]
@@ -810,7 +771,6 @@ else:
                 for m in chat_msgs:
                     is_me = m["sender"] == curr
                     align = "flex-end" if is_me else "flex-start"
-                    
                     if m.get("type") == "photo":
                         col1, col2, col3 = st.columns([1, 2, 1])
                         with col2:
@@ -831,22 +791,17 @@ else:
         st.divider()
         
         col1, col2 = st.columns([5, 1])
-        
         with col1:
             text = st.chat_input(f"Написать в {target}...", key=f"chat_input_{target}")
             if text:
                 update_typing_status(curr, target, False)
-        
         with col2:
             uploaded_photo = st.file_uploader("📷", type=['png', 'jpg', 'jpeg'], label_visibility="collapsed", key=f"photo_{target}")
-        
         if st.session_state.get(f"chat_input_{target}"):
             update_typing_status(curr, target, True)
-        
         if text:
             save_message(curr, target, text, "text", chat_type)
             st.rerun()
-        
         if uploaded_photo:
             save_photo(curr, target, uploaded_photo.getvalue(), chat_type)
             st.rerun()
@@ -854,20 +809,15 @@ else:
     else:
         st.markdown("<center><h1>🕊️ Pigeon Messenger</h1></center>", unsafe_allow_html=True)
         st.markdown("<center><p>Мессенджер для своих • Звонки • Чаты • Фото</p></center>", unsafe_allow_html=True)
-        
         st.divider()
-        
         contacts = load_contacts(curr)
         groups = get_user_groups(curr)
-        
         if contacts or groups:
             st.subheader("📋 Последние чаты")
-            
             for contact in contacts:
                 last_msg = get_last_message(curr, contact, "private")
                 is_online = is_user_online(contact)
                 status_dot = '<span class="online-dot"></span>' if is_online else '<span class="offline-dot"></span>'
-                
                 col1, col2, col3 = st.columns([1, 5, 1])
                 with col1:
                     st.markdown(status_dot, unsafe_allow_html=True)
@@ -879,10 +829,8 @@ else:
                         st.session_state["chat_type"] = "private"
                         st.rerun()
                 st.divider()
-            
             for group in groups:
                 last_msg = get_last_message(curr, group, "group")
-                
                 col1, col2, col3 = st.columns([1, 5, 1])
                 with col1:
                     st.markdown("👥")
