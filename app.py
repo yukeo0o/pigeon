@@ -778,9 +778,7 @@ else:
                     else:
                         st.markdown(f"""
                         <div style="display: flex; justify-content: {align}; margin: 5px 0;">
-                            <div class="message-bubble message-purple" style="padding: 10px; border-radius: 15px; max-width: 70%; 
-                                        border: 1px solid #ccc; color: #000000;
-                                        animation: fadeIn 0.3s ease-in;">
+                            <div class="message-bubble" style="padding: 10px; border-radius: 15px; max-width: 70%; background: #E8D5F5; border-left: 4px solid #7B2D8E; border-top: 1px solid #ccc; border-right: 1px solid #ccc; border-bottom: 1px solid #ccc; color: #000000; animation: fadeIn 0.3s ease-in;">
                                 <b style="color: #000000;">{m['sender']}</b><br>
                                 <span style="color: #000000;">{m['text']}</span><br>
                                 <small style="color: #666666;">{m['time']}</small>
