@@ -55,6 +55,13 @@ html, body, [class*="css"] {
     color: #666;
     font-style: italic;
     animation: pulse 1.5s infinite;
+}.notification-bubble {
+    background: #E8D5F5;
+    color: #000000;
+    padding: 12px;
+    border-radius: 12px;
+    margin: 5px 0;
+    border-left: 4px solid #7B2D8E;
 }
 
 .typing-dots::after {
@@ -542,7 +549,7 @@ with st.sidebar:
                 for req in pending:
                     col1, col2, col3 = st.columns([3, 1, 1])
                     with col1:
-                        st.write(f"🕊️ {req}")
+                            st.markdown(f'<div class="notification-bubble">🕊️ <b>{req}</b> хочет добавиться в друзья</div>', unsafe_allow_html=True)
                     with col2:
                         if st.button("✅", key=f"acc_{req}"):
                             accept_friend_request(req, curr)
