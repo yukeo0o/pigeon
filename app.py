@@ -11,6 +11,15 @@ import io
 import hashlib
 from streamlit_autorefresh import st_autorefresh
 import pytz
+import asyncio
+import websockets
+import threading
+import queue
+
+# WebSocket клиент
+ws_queue = queue.Queue()
+ws_connected = False
+ws_client_id = None
 
 st.set_page_config(page_title="Pigeon Messenger", page_icon="🕊️", layout="wide")
 
@@ -152,6 +161,36 @@ try:
 except ImportError:
     WEBRTC_AVAILABLE = False
 
+# --- WebSocket функции ---
+async def connect_websocket(username):
+    global ws_connected, ws_queue
+    uri = f"ws://127.0.0.1:8000/ws/{username}"
+    try:
+        async with websockets.connect(uri) as websocket:
+            ws_connected = True
+            
+            async def send_messages():
+                while True:
+                    try:
+                        msg = ws_queue.get_nowait()
+                        await websocket.send(msg)
+                    except queue.Empty:
+                        await asyncio.sleep(0.1)
+            
+            async def receive_messages():
+                async for message in websocket:
+                    st.session_state["new_ws_message"] = message
+                    st.rerun()
+            
+            await asyncio.gather(send_messages(), receive_messages())
+    except:
+        ws_connected = False
+
+def start_websocket(username):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(connect_websocket(username))
+
 # --- ФУНКЦИИ БЕЗОПАСНОСТИ ---
 def hash_password(password):
     salt = "pigeon_salt_2024"
@@ -246,6 +285,17 @@ def save_message(sender, target, text, msg_type="text", chat_type="private"):
     with open(MESSAGES_FILE, 'w', encoding='utf-8') as f:
         json.dump(msgs, f, ensure_ascii=False)
     update_typing_status(sender, target, False)
+    
+    # Отправляем через WebSocket
+    if ws_connected:
+        msg_data = json.dumps({
+            "sender": sender,
+            "target": target,
+            "text": text,
+            "type": msg_type,
+            "chat_type": chat_type
+        })
+        ws_queue.put(msg_data)
 
 def save_photo(sender, target, photo_bytes, chat_type="private"):
     photo_dir = Path("messages/photos")
@@ -419,6 +469,9 @@ with st.sidebar:
                         st.session_state["logged_user"] = login_name
                         cookie_manager.set("pigeon_user_v10", login_name, expires_at=datetime.now() + pd.Timedelta(days=30))
                         update_online_status(login_name)
+                        # Запускаем WebSocket
+                        if not ws_connected:
+                            threading.Thread(target=start_websocket, args=(login_name,), daemon=True).start()
                         st.success("Успешный вход!")
                         st.rerun()
                     else:
@@ -445,6 +498,9 @@ with st.sidebar:
                         st.session_state["logged_user"] = reg_name
                         cookie_manager.set("pigeon_user_v10", reg_name, expires_at=datetime.now() + pd.Timedelta(days=30))
                         update_online_status(reg_name)
+                        # Запускаем WebSocket
+                        if not ws_connected:
+                            threading.Thread(target=start_websocket, args=(reg_name,), daemon=True).start()
                         st.success("Регистрация успешна!")
                         st.rerun()
         
@@ -476,7 +532,6 @@ with st.sidebar:
         groups = get_user_groups(curr)
         
         if search:
-            # Фильтруем по поиску
             contacts = [c for c in contacts if search.lower() in c.lower()]
             groups = [g for g in groups if search.lower() in g.lower()]
         
@@ -642,6 +697,22 @@ else:
     chat_type = st.session_state.get("chat_type", "private")
     
     if target:
+        # Проверяем новые сообщения из WebSocket
+        if "new_ws_message" in st.session_state and st.session_state["new_ws_message"]:
+            try:
+                new_msg = json.loads(st.session_state["new_ws_message"])
+                if new_msg.get("target") == curr or new_msg.get("chat_type") == "group":
+                    save_message(
+                        new_msg["sender"],
+                        new_msg["target"],
+                        new_msg["text"],
+                        new_msg.get("type", "text"),
+                        new_msg.get("chat_type", "private")
+                    )
+            except:
+                pass
+            st.session_state["new_ws_message"] = None
+        
         col1, col2, col3, col4 = st.columns([5, 1, 1, 1])
         with col1:
             icon = "👥" if chat_type == "group" else "💬"
