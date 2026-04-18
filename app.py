@@ -331,7 +331,6 @@ def accept_friend_request(from_user, to_user):
             json.dump(requests, f, ensure_ascii=False)
     save_contact(from_user, to_user)
     save_contact(to_user, from_user)
-
 def decline_friend_request(from_user, to_user):
     requests = load_friend_requests()
     if to_user in requests and from_user in requests[to_user]:
