@@ -502,7 +502,7 @@ with st.sidebar:
         with col3:
             if st.button("⚙️", help="Настройки", use_container_width=True):
                 st.session_state["current_menu"] = "settings"
-                st.rerun()
+                
         
 
 st.divider()
