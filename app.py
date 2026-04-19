@@ -9,19 +9,11 @@ import base64
 from PIL import Image
 import io
 import hashlib
-from streamlit_autorefresh import st_autorefresh 
 import pytz
-import asyncio
-import websockets
-import threading
-import queue
-
-ws_queue = queue.Queue()
-ws_connected = False
-ws_client_id = None
 
 st.set_page_config(page_title="Pigeon Messenger", page_icon="🕊️", layout="wide")
 
+# Стили + шрифт
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;700&display=swap');
@@ -152,40 +144,11 @@ if "chat_type" not in st.session_state:
 if "current_menu" not in st.session_state:
     st.session_state["current_menu"] = "chats"
 
-if st.session_state.get("logged_user") and st.session_state.get("selected_chat"):
-    pass  # Автообновление отключено
-
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
     WEBRTC_AVAILABLE = True
 except ImportError:
     WEBRTC_AVAILABLE = False
-
-async def connect_websocket(username):
-    global ws_connected, ws_queue
-    uri = f"ws://127.0.0.1:8000/ws/{username}"
-    try:
-        async with websockets.connect(uri) as websocket:
-            ws_connected = True
-            async def send_messages():
-                while True:
-                    try:
-                        msg = ws_queue.get_nowait()
-                        await websocket.send(msg)
-                    except queue.Empty:
-                        await asyncio.sleep(0.1)
-            async def receive_messages():
-                async for message in websocket:
-                    st.session_state["new_ws_message"] = message
-                    st.rerun()
-            await asyncio.gather(send_messages(), receive_messages())
-    except:
-        ws_connected = False
-
-def start_websocket(username):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(connect_websocket(username))
 
 def hash_password(password):
     salt = "pigeon_salt_2024"
@@ -275,15 +238,6 @@ def save_message(sender, target, text, msg_type="text", chat_type="private"):
     with open(MESSAGES_FILE, 'w', encoding='utf-8') as f:
         json.dump(msgs, f, ensure_ascii=False)
     update_typing_status(sender, target, False)
-    if ws_connected:
-        msg_data = json.dumps({
-            "sender": sender,
-            "target": target,
-            "text": text,
-            "type": msg_type,
-            "chat_type": chat_type
-        })
-        ws_queue.put(msg_data)
 
 def save_photo(sender, target, photo_bytes, chat_type="private"):
     photo_dir = Path("messages/photos")
@@ -482,13 +436,11 @@ with st.sidebar:
         curr = st.session_state["logged_user"]
         update_online_status(curr)
         
-        # Верхняя часть сайдбара
         st.markdown(f"### 🕊️ {curr}")
+        st.image("https://media.tenor.com/9jQ4B1HrE5IAAAAi/pigeon-dance.gif", width=80)
         
-        # Поиск
         search = st.text_input("🔍 Поиск", placeholder="Найти чат...", label_visibility="collapsed")
         
-        # Кнопки действий
         col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("➕", help="Создать группу", use_container_width=True):
@@ -502,37 +454,34 @@ with st.sidebar:
         with col3:
             if st.button("⚙️", help="Настройки", use_container_width=True):
                 st.session_state["current_menu"] = "settings"
-                
+                st.rerun()
         
-
-st.divider()
-
-# СПИСОК ЧАТОВ
-contacts = load_contacts(curr)
-groups = get_user_groups(curr)
-
-if search:
-    contacts = [c for c in contacts if search.lower() in c.lower()]
-    groups = [g for g in groups if search.lower() in g.lower()]
-
-if contacts or groups:
-    for contact in contacts:
-        last_msg = get_last_message(curr, contact, "private")
-        is_online = is_user_online(contact)
-        status_dot = "🟢" if is_online else "⚪"
-        if st.button(f"{status_dot} {contact}\n_{last_msg}_", key=f"chat_{contact}", use_container_width=True):
-            st.session_state["selected_chat"] = contact
-            st.session_state["chat_type"] = "private"
-            st.rerun()
-    
-    for group in groups:
-        last_msg = get_last_message(curr, group, "group")
-        if st.button(f"👥 {group}\n_{last_msg}_", key=f"grp_{group}", use_container_width=True):
-            st.session_state["selected_chat"] = group
-            st.session_state["chat_type"] = "group"
-            st.rerun()
-else:
-    st.caption("Нет чатов. Нажмите 🔍 чтобы найти друзей.")
+        st.divider()
+        
+        contacts = load_contacts(curr)
+        groups = get_user_groups(curr)
+        
+        if search:
+            contacts = [c for c in contacts if search.lower() in c.lower()]
+            groups = [g for g in groups if search.lower() in g.lower()]
+        
+        if contacts or groups:
+            for contact in contacts:
+                last_msg = get_last_message(curr, contact, "private")
+                is_online = is_user_online(contact)
+                status_dot = "🟢" if is_online else "⚪"
+                if st.button(f"{status_dot} {contact}\n_{last_msg}_", key=f"chat_{contact}", use_container_width=True):
+                    st.session_state["selected_chat"] = contact
+                    st.session_state["chat_type"] = "private"
+                    st.rerun()
+            for group in groups:
+                last_msg = get_last_message(curr, group, "group")
+                if st.button(f"👥 {group}\n_{last_msg}_", key=f"grp_{group}", use_container_width=True):
+                    st.session_state["selected_chat"] = group
+                    st.session_state["chat_type"] = "group"
+                    st.rerun()
+        else:
+            st.caption("Нет чатов. Нажмите 🔍 чтобы найти друзей.")
 
 # --- ОКНО СОЗДАНИЯ ГРУППЫ ---
 if st.session_state.get("show_create_group", False):
@@ -556,7 +505,7 @@ if st.session_state.get("show_create_group", False):
                 st.session_state["show_create_group"] = False
                 st.rerun()
 
-# --- ЭКРАНЫ МЕНЮ "ЕЩЁ" ---
+# --- ЭКРАНЫ МЕНЮ ---
 if st.session_state.get("current_menu") == "profile":
     st.header("👤 Настройки профиля")
     users = load_users()
@@ -647,27 +596,74 @@ elif st.session_state.get("current_menu") == "search":
         st.session_state["current_menu"] = "chats"
         st.rerun()
 
+elif st.session_state.get("current_menu") == "requests":
+    st.header("👥 Заявки в друзья")
+    pending = get_pending_requests(curr)
+    if pending:
+        for req in pending:
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                st.markdown(f'<div class="notification-bubble">🕊️ <b>{req}</b> хочет добавиться</div>', unsafe_allow_html=True)
+            with col2:
+                if st.button("✅", key=f"acc_{req}"):
+                    accept_friend_request(req, curr)
+                    st.rerun()
+            with col3:
+                if st.button("❌", key=f"dec_{req}"):
+                    decline_friend_request(req, curr)
+                    st.rerun()
+    else:
+        st.info("Нет заявок в друзья")
+    if st.button("← Назад"):
+        st.session_state["current_menu"] = "chats"
+        st.rerun()
+
+elif st.session_state.get("current_menu") == "settings":
+    st.header("⚙️ Настройки")
+    users = load_users()
+    user_data = users.get(curr, {})
+    
+    tab1, tab2 = st.tabs(["👤 Профиль", "🔐 Безопасность"])
+    
+    with tab1:
+        display_name = st.text_input("Отображаемое имя", value=user_data.get("display_name", curr), max_chars=30)
+        bio = st.text_area("О себе", value=user_data.get("bio", ""), max_chars=100)
+        if st.button("💾 Сохранить", use_container_width=True):
+            users[curr]["display_name"] = display_name
+            users[curr]["bio"] = bio
+            with open(USERS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(users, f, ensure_ascii=False)
+            st.success("Сохранено!")
+            st.rerun()
+    
+    with tab2:
+        st.subheader("Смена пароля")
+        old_pass = st.text_input("Текущий пароль", type="password")
+        new_pass = st.text_input("Новый пароль", type="password")
+        new_pass2 = st.text_input("Повторите пароль", type="password")
+        if st.button("🔒 Сменить пароль", use_container_width=True):
+            if not check_password(curr, old_pass):
+                st.error("Неверный пароль")
+            elif new_pass != new_pass2:
+                st.error("Пароли не совпадают")
+            elif len(new_pass) < 4:
+                st.error("Минимум 4 символа")
+            else:
+                users[curr]["password"] = hash_password(new_pass)
+                with open(USERS_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(users, f, ensure_ascii=False)
+                st.success("Пароль изменён!")
+    
+    if st.button("← Назад"):
+        st.session_state["current_menu"] = "chats"
+        st.rerun()
+
 else:
     curr = st.session_state["logged_user"]
     target = st.session_state.get("selected_chat")
     chat_type = st.session_state.get("chat_type", "private")
     
     if target:
-        if "new_ws_message" in st.session_state and st.session_state["new_ws_message"]:
-            try:
-                new_msg = json.loads(st.session_state["new_ws_message"])
-                if new_msg.get("target") == curr or new_msg.get("chat_type") == "group":
-                    save_message(
-                        new_msg["sender"],
-                        new_msg["target"],
-                        new_msg["text"],
-                        new_msg.get("type", "text"),
-                        new_msg.get("chat_type", "private")
-                    )
-            except:
-                pass
-            st.session_state["new_ws_message"] = None
-        
         col1, col2, col3, col4 = st.columns([5, 1, 1, 1])
         with col1:
             icon = "👥" if chat_type == "group" else "💬"
