@@ -504,7 +504,6 @@ with st.sidebar:
                 st.session_state["current_menu"] = "settings"
                 st.rerun()
         
-        st.rerun()
 
 st.divider()
 
