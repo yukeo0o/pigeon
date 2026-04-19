@@ -9,7 +9,7 @@ import base64
 from PIL import Image
 import io
 import hashlib
-from streamlit_autorefresh import st_autorefresh
+from streamlit_autorefresh import 
 import pytz
 import asyncio
 import websockets
@@ -153,7 +153,7 @@ if "current_menu" not in st.session_state:
     st.session_state["current_menu"] = "chats"
 
 if st.session_state.get("logged_user") and st.session_state.get("selected_chat"):
-    st_autorefresh(interval=2000, limit=100000, debounce=True)
+    # (interval=2000, limit=100000, debounce=True)  ← Закомментировали, убрали дёрганье
 
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
@@ -449,8 +449,6 @@ with st.sidebar:
                         st.session_state["logged_user"] = login_name
                         cookie_manager.set("pigeon_user_v12", login_name, expires_at=datetime.now() + pd.Timedelta(days=30))
                         update_online_status(login_name)
-                        if not ws_connected:
-                            threading.Thread(target=start_websocket, args=(login_name,), daemon=True).start()
                         st.success("Успешный вход!")
                         st.rerun()
                     else:
@@ -475,44 +473,48 @@ with st.sidebar:
                         st.session_state["logged_user"] = reg_name
                         cookie_manager.set("pigeon_user_v12", reg_name, expires_at=datetime.now() + pd.Timedelta(days=30))
                         update_online_status(reg_name)
-                        if not ws_connected:
-                            threading.Thread(target=start_websocket, args=(reg_name,), daemon=True).start()
                         st.success("Регистрация успешна!")
                         st.rerun()
         st.divider()
         st.caption(f"👥 Пользователей: {len(load_users())}")
+    
     else:
         curr = st.session_state["logged_user"]
         update_online_status(curr)
+        
+        # Верхняя часть сайдбара
         st.markdown(f"### 🕊️ {curr}")
-        search = st.text_input("🔍 Поиск", placeholder="Найти чат или контакт...", label_visibility="collapsed")
-        st.divider()
-        col1, col2 = st.columns([1, 5])
+        
+        # Поиск
+        search = st.text_input("🔍 Поиск", placeholder="Найти чат...", label_visibility="collapsed")
+        
+        # Кнопки действий
+        col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("➕", help="Создать группу", use_container_width=True):
                 st.session_state["show_create_group"] = True
-        st.subheader("💬 Чаты")
+        with col2:
+            pending_count = len(get_pending_requests(curr))
+            btn_label = f"👥" if pending_count == 0 else f"👥🔴({pending_count})"
+            if st.button(btn_label, help="Заявки в друзья", use_container_width=True):
+                st.session_state["current_menu"] = "requests"
+                st.rerun()
+        with col3:
+            if st.button("⚙️", help="Настройки", use_container_width=True):
+                st.session_state["current_menu"] = "settings"
+                st.rerun()
+        
+        st.divider()
+        
+        # Список чатов
         contacts = load_contacts(curr)
         groups = get_user_groups(curr)
+        
         if search:
             contacts = [c for c in contacts if search.lower() in c.lower()]
             groups = [g for g in groups if search.lower() in g.lower()]
-        pending = get_pending_requests(curr)
-        if pending:
-            with st.expander(f"📬 Заявки ({len(pending)})", expanded=False):
-                for req in pending:
-                    col1, col2, col3 = st.columns([3, 1, 1])
-                    with col1:
-                        st.markdown(f'<div class="notification-bubble">🕊️ <b>{req}</b> хочет добавиться</div>', unsafe_allow_html=True)
-                    with col2:
-                        if st.button("✅", key=f"acc_{req}"):
-                            accept_friend_request(req, curr)
-                            st.rerun()
-                    with col3:
-                        if st.button("❌", key=f"dec_{req}"):
-                            decline_friend_request(req, curr)
-                            st.rerun()
-        if contacts:
+        
+        if contacts or groups:
             for contact in contacts:
                 last_msg = get_last_message(curr, contact, "private")
                 is_online = is_user_online(contact)
@@ -521,31 +523,14 @@ with st.sidebar:
                     st.session_state["selected_chat"] = contact
                     st.session_state["chat_type"] = "private"
                     st.rerun()
-        if groups:
             for group in groups:
                 last_msg = get_last_message(curr, group, "group")
                 if st.button(f"👥 {group}\n_{last_msg}_", key=f"grp_{group}", use_container_width=True):
                     st.session_state["selected_chat"] = group
                     st.session_state["chat_type"] = "group"
                     st.rerun()
-        if not contacts and not groups:
+        else:
             st.caption("Нет чатов. Нажмите 🔍 чтобы найти друзей.")
-        st.divider()
-        with st.expander("⚙️ Ещё", expanded=False):
-            if st.button("👤 Профиль", use_container_width=True):
-                st.session_state["current_menu"] = "profile"
-                st.rerun()
-            if st.button("👥 Контакты", use_container_width=True):
-                st.session_state["current_menu"] = "contacts"
-                st.rerun()
-            if st.button("🔍 Найти людей", use_container_width=True):
-                st.session_state["current_menu"] = "search"
-                st.rerun()
-            if st.button("🚪 Выйти", use_container_width=True):
-                cookie_manager.delete("pigeon_user_v12")
-                st.session_state["logged_user"] = None
-                st.session_state["selected_chat"] = None
-                st.rerun()
 
 # --- ОКНО СОЗДАНИЯ ГРУППЫ ---
 if st.session_state.get("show_create_group", False):
