@@ -9,7 +9,7 @@ import base64
 from PIL import Image
 import io
 import hashlib
-from streamlit_autorefresh import 
+from streamlit_autorefresh import st_autorefresh 
 import pytz
 import asyncio
 import websockets
