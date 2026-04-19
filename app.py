@@ -504,33 +504,36 @@ with st.sidebar:
                 st.session_state["current_menu"] = "settings"
                 st.rerun()
         
-        st.divider()
-        
-        # Список чатов
-        contacts = load_contacts(curr)
-        groups = get_user_groups(curr)
-        
-        if search:
-            contacts = [c for c in contacts if search.lower() in c.lower()]
-            groups = [g for g in groups if search.lower() in g.lower()]
-        
-        if contacts or groups:
-            for contact in contacts:
-                last_msg = get_last_message(curr, contact, "private")
-                is_online = is_user_online(contact)
-                status_dot = "🟢" if is_online else "⚪"
-                if st.button(f"{status_dot} {contact}\n_{last_msg}_", key=f"chat_{contact}", use_container_width=True):
-                    st.session_state["selected_chat"] = contact
-                    st.session_state["chat_type"] = "private"
-                    st.rerun()
-            for group in groups:
-                last_msg = get_last_message(curr, group, "group")
-                if st.button(f"👥 {group}\n_{last_msg}_", key=f"grp_{group}", use_container_width=True):
-                    st.session_state["selected_chat"] = group
-                    st.session_state["chat_type"] = "group"
-                    st.rerun()
-        else:
-            st.caption("Нет чатов. Нажмите 🔍 чтобы найти друзей.")
+        st.rerun()
+
+st.divider()
+
+# СПИСОК ЧАТОВ
+contacts = load_contacts(curr)
+groups = get_user_groups(curr)
+
+if search:
+    contacts = [c for c in contacts if search.lower() in c.lower()]
+    groups = [g for g in groups if search.lower() in g.lower()]
+
+if contacts or groups:
+    for contact in contacts:
+        last_msg = get_last_message(curr, contact, "private")
+        is_online = is_user_online(contact)
+        status_dot = "🟢" if is_online else "⚪"
+        if st.button(f"{status_dot} {contact}\n_{last_msg}_", key=f"chat_{contact}", use_container_width=True):
+            st.session_state["selected_chat"] = contact
+            st.session_state["chat_type"] = "private"
+            st.rerun()
+    
+    for group in groups:
+        last_msg = get_last_message(curr, group, "group")
+        if st.button(f"👥 {group}\n_{last_msg}_", key=f"grp_{group}", use_container_width=True):
+            st.session_state["selected_chat"] = group
+            st.session_state["chat_type"] = "group"
+            st.rerun()
+else:
+    st.caption("Нет чатов. Нажмите 🔍 чтобы найти друзей.")
 
 # --- ОКНО СОЗДАНИЯ ГРУППЫ ---
 if st.session_state.get("show_create_group", False):
