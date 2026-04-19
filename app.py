@@ -153,7 +153,7 @@ if "current_menu" not in st.session_state:
     st.session_state["current_menu"] = "chats"
 
 if st.session_state.get("logged_user") and st.session_state.get("selected_chat"):
-    # (interval=2000, limit=100000, debounce=True)  ← Закомментировали, убрали дёрганье
+    pass  # Автообновление отключено
 
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
