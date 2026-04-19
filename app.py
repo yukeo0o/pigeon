@@ -437,7 +437,7 @@ with st.sidebar:
         update_online_status(curr)
         
         st.markdown(f"### 🕊️ {curr}")
-        st.image("https://media.tenor.com/9jQ4B1HrE5IAAAAi/pigeon-dance.gif", width=80)
+        st.image("https://media.tenor.com/VvM6KwyV49wAAAAi/pigeonpls-pigeon-dance.gif", width=80)
         
         search = st.text_input("🔍 Поиск", placeholder="Найти чат...", label_visibility="collapsed")
         
