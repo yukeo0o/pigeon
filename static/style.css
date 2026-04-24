@@ -667,3 +667,69 @@ body.dark-theme .profile-field input:disabled {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #aaa; }
+/* Контекстное меню */
+.context-menu {
+    position: fixed;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    padding: 8px 0;
+    z-index: 1000;
+    min-width: 180px;
+}
+
+body.dark-theme .context-menu {
+    background: #3a3a3a;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.context-menu-item {
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.context-menu-item:hover {
+    background: #f0f0f0;
+}
+
+body.dark-theme .context-menu-item:hover {
+    background: #555;
+}
+
+/* Сообщение-ответ */
+.message-reply-preview {
+    border-left: 3px solid #7B2D8E;
+    padding: 5px 10px;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: #666;
+    background: rgba(123, 45, 142, 0.1);
+    border-radius: 5px;
+}
+
+.reply-bar {
+    background: #f8f9fa;
+    padding: 8px 20px;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+body.dark-theme .reply-bar {
+    background: #3a3a3a;
+    border-color: #444;
+}
+
+.reply-bar button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+}
