@@ -216,7 +216,10 @@ function playSound(type) {
 function connectWebSocket(username) {
     if (ws && ws.readyState === WebSocket.OPEN) ws.close();
     
-    ws = new WebSocket(`ws://127.0.0.1:8001/ws/${username}`);
+    // Авто-определение адреса (локально или на Render)
+const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const host = window.location.host;
+ws = new WebSocket(`${protocol}//${host}/ws/${username}`);
     
     ws.onopen = () => {
         statusEl.textContent = '🟢 Онлайн';
