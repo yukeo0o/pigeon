@@ -395,23 +395,31 @@ async function login() {
     document.getElementById('current-username').textContent = username;
     connectWebSocket(username);
     
-    // 🔄 АНИМАЦИЯ: логин улетает вниз
+    // 🔄 АНИМАЦИЯ: логин улетает вниз, чат выезжает сверху
     const loginScreen = document.getElementById('login-screen');
     const chatScreen = document.getElementById('chat-screen');
     
+    // Сначала убираем active у логина и добавляем класс анимации
     loginScreen.classList.add('fly-down');
     
+    // Через 400ms (когда анимация закончится) — переключаем экраны
     setTimeout(() => {
         loginScreen.classList.remove('active', 'fly-down');
+        
+        // Показываем чат с анимацией
         chatScreen.classList.add('active', 'fly-up');
         
+        // Разблокируем ввод
+        document.getElementById('message-input').disabled = false;
+        document.getElementById('send-button').disabled = false;
+        renderContacts();
+        
+        // Убираем класс анимации после завершения
         setTimeout(() => {
             chatScreen.classList.remove('fly-up');
-            document.getElementById('message-input').disabled = false;
-            document.getElementById('send-button').disabled = false;
-            renderContacts();
         }, 500);
     }, 400);
+
 }
 
 async function register() {
