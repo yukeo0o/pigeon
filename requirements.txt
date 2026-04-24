@@ -1,7 +1,0 @@
-streamlit
-pandas
-extra-streamlit-components
-streamlit-autorefresh
-Pillow
-pytz
-websockets
