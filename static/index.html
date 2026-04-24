@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🕊️ Pigeon 2.0</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <!-- 🔵 ПОСТОЯННАЯ ШАПКА -->
+    <div class="app-header">
+        <div class="header-content">
+            <span class="logo">🕊️ Pigeon</span>
+            <div class="header-actions">
+                <button id="theme-toggle" onclick="toggleTheme()">🌙</button>
+                <span class="header-status" id="global-status">Соединение...</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Основной контейнер -->
+    <div class="app-container">
+        <!-- Экран логина / регистрации -->
+        <div id="login-screen" class="screen active">
+            <div class="login-box">
+                <div class="welcome-message">
+                    <h2>Добро пожаловать в Pigeon</h2>
+                    <p>Быстрый и безопасный мессенджер</p>
+                </div>
+                
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('login')">Вход</button>
+                    <button class="tab" onclick="switchTab('register')">Регистрация</button>
+                </div>
+                
+                <div id="login-form" class="form active">
+                    <input type="text" id="login-username" placeholder="Логин">
+                    <input type="password" id="login-password" placeholder="Пароль">
+                    <button onclick="login()">Войти</button>
+                </div>
+                
+                <div id="register-form" class="form">
+                    <input type="text" id="reg-username" placeholder="Придумайте логин">
+                    <input type="password" id="reg-password" placeholder="Пароль">
+                    <input type="password" id="reg-password2" placeholder="Повторите пароль">
+                    <button onclick="register()">Зарегистрироваться</button>
+                </div>
+                
+                <div class="login-footer">
+                    <p>🕊️ Ваши сообщения только у вас</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Главный экран чата -->
+        <div id="chat-screen" class="screen">
+            <div class="chat-layout">
+                <!-- Боковая панель -->
+                <div class="sidebar">
+                    <div class="sidebar-header">
+                        <span id="current-username"></span>
+                        <button onclick="openProfile()" class="profile-btn">👤</button>
+                    </div>
+                    
+                    <div class="search-box">
+                        <input type="text" id="search-input" placeholder="🔍 Найти или добавить...">
+                        <button onclick="addContact()" class="add-btn">➕</button>
+                    </div>
+                    
+                    <!-- Вкладки -->
+                    <div class="sidebar-tabs">
+                        <button class="sidebar-tab active" onclick="switchSidebarTab('chats')">💬 Чаты</button>
+                        <button class="sidebar-tab" onclick="switchSidebarTab('requests')">
+                            👥 Заявки
+                            <span id="requests-badge" class="badge" style="display: none;">0</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Список чатов -->
+                    <div id="chats-list" class="contacts-list"></div>
+                    
+                    <!-- Список заявок -->
+                    <div id="requests-list" class="contacts-list" style="display: none;"></div>
+                    
+                    <div class="sidebar-footer">
+                        <button onclick="logout()" class="logout-btn">🚪 Выйти</button>
+                    </div>
+                </div>
+                
+                <!-- Область чата -->
+                <div class="chat-area">
+                    <div id="chat-header" class="chat-header">
+                        <span id="chat-title">Выберите чат</span>
+                        <span id="chat-status"></span>
+                    </div>
+                    
+                    <div id="messages-container" class="messages-container">
+                        <div class="empty-chat-message">
+                            <div class="empty-icon">🕊️</div>
+                            <h3>Добро пожаловать в Pigeon</h3>
+                            <p>Выберите чат слева или добавьте друга</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Панель реакций -->
+                    <div id="reaction-picker" class="reaction-picker" style="display: none;">
+                        <button onclick="addReaction('👍')">👍</button>
+                        <button onclick="addReaction('❤️')">❤️</button>
+                        <button onclick="addReaction('😂')">😂</button>
+                        <button onclick="addReaction('😮')">😮</button>
+                        <button onclick="addReaction('😢')">😢</button>
+                        <button onclick="addReaction('😡')">😡</button>
+                    </div>
+                    
+                    <div class="message-input">
+                        <input type="text" id="message-input" placeholder="Написать сообщение..." disabled>
+                        <button id="send-button" onclick="sendMessage()" disabled>📤</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Экран профиля -->
+        <div id="profile-screen" class="screen">
+            <div class="profile-container">
+                <div class="profile-header">
+                    <button onclick="closeProfile()" class="back-btn">← Назад</button>
+                    <h2>👤 Профиль</h2>
+                    <div></div>
+                </div>
+                
+                <div class="profile-content">
+                    <div class="profile-field">
+                        <label>Логин</label>
+                        <input type="text" id="profile-login" disabled>
+                    </div>
+                    <div class="profile-field">
+                        <label>Имя</label>
+                        <input type="text" id="profile-firstname" placeholder="Ваше имя">
+                    </div>
+                    <div class="profile-field">
+                        <label>Фамилия</label>
+                        <input type="text" id="profile-lastname" placeholder="Ваша фамилия">
+                    </div>
+                    <div class="profile-field">
+                        <label>Никнейм</label>
+                        <input type="text" id="profile-nickname" placeholder="Как вас называть">
+                    </div>
+                    
+                    <button onclick="saveProfile()" class="save-profile-btn">💾 Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/chat.js"></script>
+</body>
+</html>
