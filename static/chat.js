@@ -7,8 +7,11 @@ let friendRequests = [];
 let contacts = [];
 let profiles = JSON.parse(localStorage.getItem('pigeon_profiles') || '{}');
 let selectedMessageId = null;
+let replyToMessage = null; // Для ответа на сообщение
 
 const statusEl = document.getElementById('global-status');
+const soundSend = document.getElementById('sound-send');
+const soundReceive = document.getElementById('sound-receive');
 
 // ========== ТЕМА ==========
 function toggleTheme() {
@@ -18,7 +21,6 @@ function toggleTheme() {
     localStorage.setItem('pigeon_theme', isDark ? 'dark' : 'light');
 }
 
-// Загружаем тему при старте
 if (localStorage.getItem('pigeon_theme') === 'dark') {
     document.body.classList.add('dark-theme');
     document.getElementById('theme-toggle').textContent = '☀️';
@@ -81,6 +83,135 @@ function saveProfile() {
     closeProfile();
 }
 
+// ========== КОНТЕКСТНОЕ МЕНЮ ==========
+function showContextMenu(event, text, messageId) {
+    // Удаляем старое меню
+    const oldMenu = document.querySelector('.context-menu');
+    if (oldMenu) oldMenu.remove();
+
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+    menu.style.top = event.clientY + 'px';
+    menu.style.left = event.clientX + 'px';
+
+    menu.innerHTML = `
+        <div class="context-menu-item" onclick="copyMessage('${encodeURIComponent(text)}'); closeContextMenu();">
+            📋 Копировать
+        </div>
+        <div class="context-menu-item" onclick="startReply('${messageId}'); closeContextMenu();">
+            ↩️ Ответить
+        </div>
+    `;
+
+    document.body.appendChild(menu);
+
+    // Закрыть при клике вне меню
+    setTimeout(() => {
+        document.addEventListener('click', closeContextMenu, { once: true });
+    }, 100);
+}
+
+function closeContextMenu() {
+    const menu = document.querySelector('.context-menu');
+    if (menu) menu.remove();
+}
+
+// ========== КОПИРОВАТЬ ==========
+function copyMessage(encodedText) {
+    const text = decodeURIComponent(encodedText);
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Скопировано!');
+        });
+    } else {
+        // Для старых браузеров
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            showToast('Скопировано!');
+        } catch (e) {
+            showToast('Ошибка копирования');
+        }
+        document.body.removeChild(textarea);
+    }
+}
+
+// ========== ОТВЕТИТЬ ==========
+function startReply(messageId) {
+    const messageElement = document.getElementById(`msg-${messageId}`);
+    if (!messageElement) return;
+    
+    const text = messageElement.querySelector('.message-bubble').innerText.split('\n').slice(1).join(' ');
+    replyToMessage = { id: messageId, text: text.substring(0, 50) };
+    
+    // Показываем панель ответа
+    showReplyBar(text.substring(0, 50));
+}
+
+function showReplyBar(text) {
+    const existingBar = document.querySelector('.reply-bar');
+    if (existingBar) existingBar.remove();
+
+    const chatArea = document.querySelector('.chat-area');
+    const messageInput = document.querySelector('.message-input');
+    
+    const replyBar = document.createElement('div');
+    replyBar.className = 'reply-bar';
+    replyBar.innerHTML = `
+        <span>↩️ ${text}...</span>
+        <button onclick="cancelReply()">✖️</button>
+    `;
+    
+    chatArea.insertBefore(replyBar, messageInput);
+}
+
+function cancelReply() {
+    replyToMessage = null;
+    const replyBar = document.querySelector('.reply-bar');
+    if (replyBar) replyBar.remove();
+}
+
+// ========== ТОСТ (мини-уведомление) ==========
+function showToast(message) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #333;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 24px;
+        font-size: 14px;
+        z-index: 9999;
+        opacity: 0;
+        transition: opacity 0.3s;
+    `;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => { toast.style.opacity = '1'; }, 10);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 2000);
+}
+
+// ========== ЗВУКИ ==========
+function playSound(type) {
+    const sound = type === 'send' ? soundSend : soundReceive;
+    if (sound) {
+        sound.currentTime = 0;
+        sound.play().catch(() => {}); // Игнорируем ошибку если браузер блокирует
+    }
+}
+
 // ========== WEBSOCKET ==========
 function connectWebSocket(username) {
     if (ws && ws.readyState === WebSocket.OPEN) ws.close();
@@ -89,12 +220,10 @@ function connectWebSocket(username) {
     
     ws.onopen = () => {
         statusEl.textContent = '🟢 Онлайн';
-        console.log('WebSocket подключен');
     };
     
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        console.log('Получено:', data);
         
         if (data.status === 'sent' && data.id) {
             updateMessageStatus(data.id, 'sent');
@@ -112,8 +241,9 @@ function connectWebSocket(username) {
         }
         
         if (data.from && data.text) {
+            playSound('receive');
             if (currentChat === data.from) {
-                addMessageToChat(data.from, data.text, false, 'read', data.id);
+                addMessageToChat(data.from, data.text, false, 'read', data.id, data.replyTo);
                 ws.send(JSON.stringify({ type: 'read', target: data.from, messageId: data.id }));
             }
         }
@@ -149,32 +279,51 @@ function sendMessage() {
     const text = input.value.trim();
     if (!text || !currentChat || !ws || ws.readyState !== WebSocket.OPEN) return;
     
+    playSound('send');
+    
     const msgId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-    ws.send(JSON.stringify({ id: msgId, target: currentChat, text, timestamp: new Date().toISOString() }));
-    addMessageToChat(currentUser, text, true, 'pending', msgId);
+    ws.send(JSON.stringify({
+        id: msgId,
+        target: currentChat,
+        text: text,
+        timestamp: new Date().toISOString(),
+        replyTo: replyToMessage?.id || null
+    }));
+    
+    addMessageToChat(currentUser, text, true, 'pending', msgId, replyToMessage?.text);
     input.value = '';
+    cancelReply();
 }
 
-function addMessageToChat(sender, text, own, status = 'read', msgId = null) {
+function addMessageToChat(sender, text, own, status = 'read', msgId = null, replyText = null) {
     const container = document.getElementById('messages-container');
     const emptyMsg = container.querySelector('.empty-chat-message');
     if (emptyMsg) emptyMsg.remove();
-    
+
     const id = msgId || Date.now() + '-' + Math.random().toString(36).substr(2, 9);
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${own ? 'own' : ''}`;
     messageDiv.id = `msg-${id}`;
-    messageDiv.oncontextmenu = (e) => { e.preventDefault(); showReactionPicker(id); };
-    
+
     let statusIcon = '';
     if (own) {
         if (status === 'pending') statusIcon = '🕒';
         else if (status === 'sent') statusIcon = '✓';
         else if (status === 'read') statusIcon = '✓✓';
     }
-    
+
+    messageDiv.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showContextMenu(e, text, id);
+    });
+
+    const replyHTML = replyText
+        ? `<div class="message-reply-preview">↩️ ${replyText}</div>`
+        : '';
+
     messageDiv.innerHTML = `
         <div class="message-bubble">
+            ${replyHTML}
             <b>${sender}</b>
             ${text}
             <div class="message-meta">
@@ -184,7 +333,7 @@ function addMessageToChat(sender, text, own, status = 'read', msgId = null) {
             <div class="message-reactions" id="reactions-${id}"></div>
         </div>
     `;
-    
+
     container.appendChild(messageDiv);
     container.scrollTop = container.scrollHeight;
     return id;
@@ -222,7 +371,7 @@ function addReactionToMessage(messageId, emoji) {
     const reactionsDiv = document.getElementById(`reactions-${messageId}`);
     if (!reactionsDiv) return;
     
-    const existing = Array.from(reactionsDiv.children).find(b => b.textContent === emoji);
+    const existing = Array.from(reactionsDiv.children).find(b => b.textContent.startsWith(emoji));
     if (existing) {
         const count = parseInt(existing.dataset.count || '1') + 1;
         existing.dataset.count = count;
