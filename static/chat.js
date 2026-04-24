@@ -394,10 +394,24 @@ async function login() {
     currentUser = username;
     document.getElementById('current-username').textContent = username;
     connectWebSocket(username);
-    showScreen('chat-screen');
-    document.getElementById('message-input').disabled = false;
-    document.getElementById('send-button').disabled = false;
-    renderContacts();
+    
+    // 🔄 АНИМАЦИЯ: логин улетает вниз
+    const loginScreen = document.getElementById('login-screen');
+    const chatScreen = document.getElementById('chat-screen');
+    
+    loginScreen.classList.add('fly-down');
+    
+    setTimeout(() => {
+        loginScreen.classList.remove('active', 'fly-down');
+        chatScreen.classList.add('active', 'fly-up');
+        
+        setTimeout(() => {
+            chatScreen.classList.remove('fly-up');
+            document.getElementById('message-input').disabled = false;
+            document.getElementById('send-button').disabled = false;
+            renderContacts();
+        }, 500);
+    }, 400);
 }
 
 async function register() {
