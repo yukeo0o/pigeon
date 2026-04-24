@@ -3,3 +3,4 @@ uvicorn
 websockets
 pydantic
 python-multipart
+sqlalchemy
