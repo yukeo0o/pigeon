@@ -392,63 +392,88 @@ function addReactionToMessage(messageId, emoji) {
 // ========== АВТОРИЗАЦИЯ ==========
 async function login() {
     const username = document.getElementById('login-username').value.trim();
-    if (!username) { alert('Введите логин'); return; }
-    
-    currentUser = username;
-    document.getElementById('current-username').textContent = username;
-    connectWebSocket(username);
-    
-    // 🔄 АНИМАЦИЯ: логин улетает вниз, чат выезжает сверху
-    const loginScreen = document.getElementById('login-screen');
-    const chatScreen = document.getElementById('chat-screen');
-    
-    // Сначала убираем active у логина и добавляем класс анимации
-    loginScreen.classList.add('fly-down');
-    
-    // Через 400ms (когда анимация закончится) — переключаем экраны
-    setTimeout(() => {
-        loginScreen.classList.remove('active', 'fly-down');
-        
-        // Показываем чат с анимацией
-        chatScreen.classList.add('active', 'fly-up');
-        
-        // Разблокируем ввод
-        document.getElementById('message-input').disabled = false;
-        document.getElementById('send-button').disabled = false;
-        renderContacts();
-        
-        // Убираем класс анимации после завершения
-        setTimeout(() => {
-            chatScreen.classList.remove('fly-up');
-        }, 500);
-    }, 400);
+    const password = document.getElementById('login-password').value;
 
+    if (!username || !password) {
+        alert('Введите логин и пароль');
+        return;
+    }
+
+    try {
+        // 🔒 Стучимся к нашему новому умному серверу
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        if (response.ok) {
+            currentUser = username;
+            document.getElementById('current-username').textContent = username;
+            connectWebSocket(username);
+            
+            // Анимация перехода
+            const loginScreen = document.getElementById('login-screen');
+            const chatScreen = document.getElementById('chat-screen');
+            loginScreen.classList.add('fly-down');
+            
+            setTimeout(() => {
+                loginScreen.classList.remove('active', 'fly-down');
+                chatScreen.classList.add('active', 'fly-up');
+                setTimeout(() => {
+                    chatScreen.classList.remove('fly-up');
+                    document.getElementById('message-input').disabled = false;
+                    document.getElementById('send-button').disabled = false;
+                    renderContacts();
+                }, 500);
+            }, 400);
+        } else {
+            const error = await response.json();
+            alert(error.detail || 'Неверный логин или пароль');
+        }
+    } catch (e) {
+        alert('Ошибка соединения с сервером');
+    }
 }
 
 async function register() {
     const username = document.getElementById('reg-username').value.trim();
     const password = document.getElementById('reg-password').value;
     const password2 = document.getElementById('reg-password2').value;
-    
-    if (!username) { alert('Введите логин'); return; }
-    if (password !== password2) { alert('Пароли не совпадают'); return; }
-    if (password.length < 4) { alert('Пароль минимум 4 символа'); return; }
-    
-    alert(`Регистрация успешна! Теперь войдите как ${username}`);
-    switchTab('login');
-    document.getElementById('login-username').value = username;
-}
 
-// ========== КОНТАКТЫ И ЗАЯВКИ ==========
-function addContact() {
-    const input = document.getElementById('search-input');
-    const username = input.value.trim();
-    if (!username) { alert('Введите логин'); return; }
-    if (username === currentUser) { alert('Нельзя добавить себя'); return; }
-    
-    ws.send(JSON.stringify({ type: 'friend_request', target: username }));
-    input.value = '';
-    alert(`Заявка отправлена пользователю ${username}`);
+    if (!username || !password) {
+        alert('Введите логин и пароль');
+        return;
+    }
+    if (password !== password2) {
+        alert('Пароли не совпадают');
+        return;
+    }
+    if (password.length < 4) {
+        alert('Пароль минимум 4 символа');
+        return;
+    }
+
+    try {
+        // 🔒 Стучимся к нашему новому умному серверу
+        const response = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        if (response.ok) {
+            alert(`Регистрация успешна! Теперь войдите как ${username}`);
+            switchTab('login');
+            document.getElementById('login-username').value = username;
+            document.getElementById('login-password').value = '';
+        } else {
+            const error = await response.json();
+            alert(error.detail || 'Ошибка регистрации');
+        }
+    } catch (e) {
+        alert('Ошибка соединения с сервером');
+    }
 }
 
 function renderContacts() {
