@@ -36,9 +36,8 @@ async def register(req: RegisterRequest):
 @app.post("/api/login")
 async def login(req: LoginRequest, response: Response):
     if check_user(req.username, req.password):
-        # Создаём "штамп" (cookie) на 30 дней
         from datetime import datetime, timedelta
-        import jwt  # Не забудь добавить PyJWT в requirements.txt
+        import jwt
         token = jwt.encode(
             {"username": req.username, "exp": datetime.utcnow() + timedelta(days=30)},
             "pigeon_secret_key", 
@@ -70,6 +69,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
             message = json.loads(data)
             msg_type = message.get("type")
 
+            # ===== ЗАЯВКИ В ДРУЗЬЯ =====
             if msg_type == "friend_request":
                 target = message.get("target")
                 if target in active_connections:
@@ -85,6 +85,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                         "type": "friend_accepted", "from": username
                     }))
                 continue
+            # ===========================
 
             if msg_type == "chat_opened":
                 target = message.get("target")
