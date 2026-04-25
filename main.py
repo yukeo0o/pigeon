@@ -34,8 +34,17 @@ async def register(req: RegisterRequest):
 
 # API: Вход
 @app.post("/api/login")
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, response: Response):
     if check_user(req.username, req.password):
+        # Создаём "штамп" (cookie) на 30 дней
+        from datetime import datetime, timedelta
+        import jwt  # Не забудь добавить PyJWT в requirements.txt
+        token = jwt.encode(
+            {"username": req.username, "exp": datetime.utcnow() + timedelta(days=30)},
+            "pigeon_secret_key", 
+            algorithm="HS256"
+        )
+        response.set_cookie(key="pigeon_session", value=token, max_age=2592000)
         return {"status": "ok", "username": req.username}
     raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
